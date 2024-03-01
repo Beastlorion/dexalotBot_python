@@ -124,13 +124,6 @@ async def initializeContracts(market,pairStr):
     elif item["symbol"] == "AVAX":
       contracts[item["symbol"]]["tokenDetails"] = item
       
-  block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
-  # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
-  # worker.start()
-  try:
-    asyncio.create_task(log_loop(block_filter, 2))
-  except Exception as error:
-    print("error in logloop:", error)
       
 def signTransaction(provider,tx):
   return provider.eth.account.sign_transaction(tx, private_key=config[market+"_pk"])
@@ -150,6 +143,15 @@ def incrementNonce():
   global nonce
   nonce = nonce + 1
   
+def startBlockFilter():
+  block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
+  # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
+  # worker.start()
+  try:
+    asyncio.create_task(log_loop(block_filter, 2))
+  except Exception as error:
+    print("error in logloop:", error)
+    
 async def log_loop(event_filter, poll_interval):
   print("start log loop")
   while True:

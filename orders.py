@@ -56,6 +56,12 @@ async def cancelOrderList(ordersIDs):
 async def cancelAllOrders(pairStr):
   openOrders = await getOpenOrders(pairStr)
   
+  for i in range(10):
+    if len(contracts.pendingTransactions) > 0:
+      print("Waiting for transactions to process")
+      await asyncio.sleep(1)
+    else: 
+      break
   if len(openOrders["rows"]) >= 0:
     ordersIDs = []
     for order in openOrders["rows"]:

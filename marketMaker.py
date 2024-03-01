@@ -34,6 +34,7 @@ async def start():
   )
   await contracts.initializeProviders(market)
   await contracts.initializeContracts(market,pairStr)
+  contracts.startBlockFilter()
   await orderUpdater()
 
 async def orderUpdater():
@@ -44,13 +45,14 @@ async def orderUpdater():
   while True:
     marketPrice = price_feeds.getMarketPrice()
     if marketPrice == 0:
-      print("no market data")
+      print("waiting for market data")
       await asyncio.sleep(2)
       continue
     if abs(lastUpdatePrice - marketPrice)/marketPrice > float(settings["refreshTolerance"])/100:
       
       if len(contracts.pendingTransactions) > 0 and attempts < settings["refreshInterval"]:
         attempts = attempts + 1
+        await asyncio.sleep(1)
         continue
       else:
         attempts = 0
