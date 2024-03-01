@@ -14,6 +14,8 @@ config = {
     **dotenv_values(".env.shared"),
     **dotenv_values(".env.secret")
 }
+
+freezeNewOrders = False
 contracts = {}
 tokenDetails = None
 address = None
@@ -21,6 +23,7 @@ signature = None
 ERC20ABI = json.load(ERC20ABIf)
 nonce = 0
 pendingTransactions = []
+activeOrders = []
 
 async def getDeployments(dt):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -147,24 +150,38 @@ def startBlockFilter():
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
   # worker.start()
-  try:
-    asyncio.create_task(log_loop(block_filter, 2))
-  except Exception as error:
-    print("error in logloop:", error)
+  asyncio.create_task(log_loop(block_filter, 2))
     
 async def log_loop(event_filter, poll_interval):
-  print("start log loop")
+  global activeOrders
+  print("start block filter")
   while True:
-    for event in event_filter.get_new_entries():
-      block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
-      transactionsProcessed = []
-      for tx_hash in block.transactions:
-        for hash in pendingTransactions:
-          if hash == tx_hash:
-            transactionsProcessed.append(hash)
-        # if tx['to'] == WETH_ADDRESS:
-        #     print(f'Found interaction with WETH contract! {tx}')
-      for hash in transactionsProcessed:
-        pendingTransactions.remove(hash)
-        print("TX Processed:",hash.hex())
+    try:
+      for event in event_filter.get_new_entries():
+        block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
+        transactionsProcessed = []
+        for hash in block.transactions:
+          for tx in pendingTransactions:
+            if tx["hash"] == hash:
+              receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
+              if receipt.status == 1:
+                transactionsProcessed.append(tx)
+                if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
+                  activeOrders = activeOrders + tx['clientOrderIDs']
+                print('transaction success:', tx['purpose'])
+              elif tx['purpose'] == 'cancel':
+                print('cancel tx failed:', tx)
+                tx['status'] = 'failed'
+              else:
+                print('tx failed:', tx)
+                transactionsProcessed.append(tx)
+          # if tx['to'] == WETH_ADDRESS:
+          #     print(f'Found interaction with WETH contract! {tx}')
+        for tx in transactionsProcessed:
+          pendingTransactions.remove(tx)
+    except:
+      print("exception, closing block filter")
     await asyncio.sleep(poll_interval)
+    
+def newPendingTx(purpose,hash,clientOrderIDs = []):
+  pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'clientOrderIDs':clientOrderIDs})

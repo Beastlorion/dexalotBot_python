@@ -48,25 +48,30 @@ async def cancelOrderList(ordersIDs):
   
   cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(ordersIDs).estimate_gas();
   contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(ordersIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(cancelTxGasest * 1.2)});
-  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
   contracts.incrementNonce()
-  contracts.pendingTransactions.append(response)
-  print("cancelOrderList response:", response.hex(), round(time.time()))
+  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+  contracts.newPendingTx('cancel',response)
+  # print("cancelOrderList response:", response.hex(), round(time.time()))
   
-async def cancelAllOrders(pairStr):
-  openOrders = await getOpenOrders(pairStr)
-  
+async def cancelAllOrders(pairStr,shuttingDown = False):
   for i in range(10):
     if len(contracts.pendingTransactions) > 0:
       print("Waiting for transactions to process")
       await asyncio.sleep(1)
     else: 
       break
+  for i in range(5):
+    openOrders = await getOpenOrders(pairStr)
+    if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
+      break
+    else:
+      await asyncio.sleep(1)
   if len(openOrders["rows"]) >= 0:
     ordersIDs = []
     for order in openOrders["rows"]:
       ordersIDs.append(order["id"])
     await cancelOrderList(ordersIDs)
+    contracts.activeOrders = []
   else:
     print("no open orders to cancel")
   
@@ -117,14 +122,20 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
     sides.append(order["side"])
     clientOrderIDs.append(HexBytes(str(order["clientOrderID"]).encode('utf-8')))
     type2s.append(3)
-    
-  print(limit_orders)
   
-  for x in range(6):
+  status = True
+  for x in range(8):
     if len(contracts.pendingTransactions) > 0:
-      await asyncio.sleep(1)
-  # print("attempt place orders time:",time.time())
-      
+      for tx in contracts.pendingTransactions:
+        if tx["status"] == 'failed':
+          status = False
+          contracts.pendingTransactions.remove(tx)
+    else:
+      break
+    if (contracts.freezeNewOrders):
+      return False
+    await asyncio.sleep(1)
+  print(limit_orders, len(limit_orders), 'time:',time.time())
   gasest = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
     pairByte32,
     clientOrderIDs,
@@ -142,7 +153,8 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
     sides,
     type2s
   ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(gasest * 1.2)});
-  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
   contracts.incrementNonce()
-  contracts.pendingTransactions.append(response)
-  print("addLimitOrderList response:", response.hex(), round(time.time()))
+  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+  contracts.newPendingTx('addOrderList',response,clientOrderIDs)
+  print("addLimitOrderList:", response.hex(), 'time: ',round(time.time()))
+  return True

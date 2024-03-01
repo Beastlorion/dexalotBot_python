@@ -10,13 +10,15 @@ client = {}
 marketID = None
 
 async def main():
-  # try:
-  await marketMaker.start()
-  # except asyncio.CancelledError:
-  #   print("asyncio.CancelledError")
-  # finally:
-  #   print("finished")
-  #   await marketMaker.cancelAllOrders(client, marketID)
+  try:
+    await marketMaker.start()
+  except asyncio.CancelledError:
+    print("asyncio.CancelledError")
+  except KeyboardInterrupt:
+    print("KeyboardInterrupt")
+  finally:
+    print("CANCELLING ORDERS AND SHUTTING DOWN")
+    await orders.cancelAllOrders(marketMaker.pairStr, True)
 
 # Start and run until complete
 loop = asyncio.get_event_loop()
@@ -27,6 +29,10 @@ try:
   loop.run_until_complete(task)
 except KeyboardInterrupt:
   # Handle other shutdown signals here
-  print("CANCELLING ORDERS AND SHUTTING DOWN")
-  task = loop.create_task(orders.cancelAllOrders(marketMaker.pairStr))
-  loop.run_until_complete(task)
+  try:
+    print("CANCELLING ORDERS AND SHUTTING DOWN")
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(orders.cancelAllOrders(marketMaker.pairStr,True))
+    loop.run_until_complete(task)
+  except:
+    print("Stopping. Please confirm that orders have been cancelled.")

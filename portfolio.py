@@ -4,6 +4,13 @@ import contracts
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
+from eth_utils.units import units, decimal
+
+units.update(
+    {
+        "8_dec": decimal.Decimal("100000000"),  # Add in 8 decimals
+    }
+)
 
 config = {
     **dotenv_values(".env.shared"),
@@ -39,6 +46,8 @@ async def getBalances(base, quote):
     match decimals:
       case 6:
         shift = "lovelace"
+      case 8:
+        shift = "8_dec"
     basec = contracts.contracts[base]["deployedContract"].functions.balanceOf(address).call()
     contracts.contracts[base]["mainnetBal"] = Web3.from_wei(basec, shift)
     
@@ -53,6 +62,8 @@ async def getBalances(base, quote):
     match decimals:
       case 6:
         shift = "lovelace"
+      case 8:
+        shift = "8_dec"
     quoteC = contracts.contracts[quote]["deployedContract"].functions.balanceOf(address).call()
     contracts.contracts[quote]["mainnetBal"] = Web3.from_wei(quoteC, shift)
     

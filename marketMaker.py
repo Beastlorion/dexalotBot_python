@@ -34,6 +34,7 @@ async def start():
   )
   await contracts.initializeProviders(market)
   await contracts.initializeContracts(market,pairStr)
+  await contracts.refreshDexalotNonce()
   contracts.startBlockFilter()
   await orderUpdater()
 
@@ -61,11 +62,10 @@ async def orderUpdater():
 
       try: 
         await asyncio.gather(
-          contracts.refreshDexalotNonce(),
+          orders.cancelAllOrders(pairStr),
           portfolio.getBalances(base, quote),
           orders.getBestOrders()
         )
-        await orders.cancelAllOrders(pairStr)
       except Exception as error:
         print("error in cancel and get positions calls", error)
         continue
@@ -87,82 +87,15 @@ async def orderUpdater():
       
       if len(limit_orders) > 0:
         try:
-          await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
-          
+          results = await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
+          if not results:
+            continue
           lastUpdatePrice = marketPrice
           continue
         except Exception as error:
           print("failed to place orders",error)
+          await contracts.refreshDexalotNonce()
           continue
       else:
         print("no orders to place")
     await asyncio.sleep(1)
-      
-
-  
-  # fundingRate = await client.get_funding_rate(marketID,time.time())
-  # fundingRate = fundingRate["fundingRate"]
-  # print("last funding rate:", fundingRate)
-  
-  # nextFundingRate = await client.get_predicted_funding_rate(marketID)
-  # nextFundingRate = nextFundingRate["fundingRate"]
-  # print("next funding rate:",nextFundingRate)
-  
-def generateBuyOrders(marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize):
-  orders = []
-  amountOnOrder = 0
-  leverage = float(settings["leverage"])
-  for level in settings["orderLevels"]:
-    l = settings["orderLevels"][level]
-    spread = float(l["spread"])/100 + defensiveSkew
-    bidPrice = midPrice * (1 - spread)
-    roundedBidPrice = round(bidPrice,get_price_precision(marketID))
-    
-    amtToTrade = (availableMargin * leverage)/roundedBidPrice
-    qty = getQty(l,amtToTrade,marketID)
-    reduceOnly = False
-    if qty == 0:
-      continue
-    elif currentSize < 0 and qty * -1 > currentSize + amountOnOrder:
-      reduceOnly = True
-      amountOnOrder = amountOnOrder + qty
-    availableMargin = availableMargin - ((qty * roundedBidPrice)/leverage)
-    order = LimitOrder.new(marketID,qty,roundedBidPrice,reduceOnly,True)
-    orders.append(order)
-  return orders
-  
-def generateSellOrders(marketID, midPrice, settings, availableMargin, defensiveSkew, currentSize):
-  orders = []
-  amountOnOrder = 0
-  leverage = float(settings["leverage"])
-  for level in settings["orderLevels"]:
-    l = settings["orderLevels"][level]
-    spread = float(l["spread"])/100 + defensiveSkew
-    askPrice = midPrice * (1 + spread)
-    roundedAskPrice = round(askPrice,get_price_precision(marketID))
-    amtToTrade = (availableMargin * leverage)/roundedAskPrice
-    qty = getQty(l,amtToTrade,marketID) * -1
-    reduceOnly = False
-    if qty == 0:
-      continue
-    elif currentSize > 0 and qty * -1 < currentSize + amountOnOrder:
-      reduceOnly = True
-      amountOnOrder = amountOnOrder + qty
-    availableMargin = availableMargin - ((qty * roundedAskPrice)/leverage)
-    order = LimitOrder.new(marketID,qty,roundedAskPrice,reduceOnly,True)
-    orders.append(order)
-  return orders
-      
-def getQty(level, amtToTrade,marketID):
-  if float(level["qty"]) < amtToTrade:
-    return float(level["qty"])
-  elif amtToTrade > get_minimum_quantity(marketID):
-    return float(Decimal(str(amtToTrade)).quantize(Decimal(str(get_minimum_quantity(marketID))), rounding=ROUND_DOWN))
-  else:
-    return 0
-  
-async def handleOrderUpdates(pointer, response):
-  if response.EventName == 'OrderMatched':
-    print(response)
-    print("ORDER FILLED - QTY:",response.Args["fillAmount"], " PRICE:",response.Args["price"])
-    

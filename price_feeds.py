@@ -15,9 +15,14 @@ async def startPriceFeed(market):
   
   client = await AsyncClient.create()
   bm = BinanceSocketManager(client)
-  if (quote == "USDC" and base != "EUROC"):
+  if (quote == "USDC" and base != "EUROC" and base != "USDt"):
     tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
-    usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm))
+    usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+  elif(base == "AVAX" and quote == "USDt"):
+    tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
+  elif(base == "USDt" and quote == "USDC"):
+    usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+  
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
 async def usdtUpdater():
@@ -27,6 +32,8 @@ async def usdtUpdater():
 
 async def startTicker(client, bm, base, quote):
   global marketPrice
+  if base == "BTC.b":
+    base = "BTC"
   symbol = base + 'USDT'
 
   # start any sockets here, i.e a trade socket
@@ -38,11 +45,12 @@ async def startTicker(client, bm, base, quote):
       priceUsdt = float(res["p"])
       if quote == "USDC" and usdcUsdt:
         marketPrice = priceUsdt * usdcUsdt
-        # print("USD PRICE:",marketPrice)
+      elif (quote == "USDt"):
+        marketPrice = priceUsdt
   await client.close_connection()
   
-async def usdc_usdtTicker(client, bm):
-  global usdcUsdt
+async def usdc_usdtTicker(client, bm, base, quote):
+  global usdcUsdt,marketPrice
   symbol = 'USDCUSDT'
 
   # start any sockets here, i.e a trade socket
@@ -52,6 +60,8 @@ async def usdc_usdtTicker(client, bm):
     while True:
       res = await tscm.recv()
       usdcUsdt = float(res["p"])
+      if (base == "USDt" and quote == "USDC"):
+        marketPrice = 1/usdcUsdt
   await client.close_connection()
 
 async def updateUSDT():
