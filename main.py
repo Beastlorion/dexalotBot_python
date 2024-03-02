@@ -16,6 +16,8 @@ async def main():
     print("asyncio.CancelledError")
   except KeyboardInterrupt:
     print("KeyboardInterrupt")
+  except Exception as error:
+    print("error:",error)
   finally:
     print("CANCELLING ORDERS AND SHUTTING DOWN")
     await orders.cancelAllOrders(marketMaker.pairStr, True)

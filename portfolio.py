@@ -37,7 +37,7 @@ async def getBalances(base, quote):
   contracts.contracts["AVAX"]["portfolioTot"] = Web3.from_wei(alotD[0], 'ether')
   contracts.contracts["AVAX"]["portfolioAvail"] = Web3.from_wei(alotD[1], 'ether')
   
-  # print("BALANCES AVAX:",contracts.contracts["AVAX"]["mainnetBal"], contracts.contracts["AVAX"]["portfolioTot"], contracts.contracts["AVAX"]["portfolioAvail"])
+  print("BALANCES AVAX:",contracts.contracts["AVAX"]["mainnetBal"], contracts.contracts["AVAX"]["portfolioTot"], contracts.contracts["AVAX"]["portfolioAvail"])
   # print("BALANCES ALOT:",contracts.contracts["ALOT"]["mainnetBal"], contracts.contracts["ALOT"]["portfolioTot"], contracts.contracts["ALOT"]["portfolioAvail"])
   
   if base != "ALOT" and base != "AVAX":
@@ -54,7 +54,7 @@ async def getBalances(base, quote):
     baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
     contracts.contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], shift)
     contracts.contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], shift)
-    # print("BALANCES:",base,contracts.contracts[base]["mainnetBal"], contracts.contracts[base]["portfolioTot"], contracts.contracts[base]["portfolioAvail"])
+    print("BALANCES:",base,contracts.contracts[base]["mainnetBal"], contracts.contracts[base]["portfolioTot"], contracts.contracts[base]["portfolioAvail"])
   
   if quote != "ALOT" and quote != "AVAX":
     decimals = contracts.contracts[quote]["tokenDetails"]["evmdecimals"]
@@ -70,7 +70,7 @@ async def getBalances(base, quote):
     quoteD = portfolio.functions.getBalance(address, quote.encode('utf-8')).call()
     contracts.contracts[quote]["portfolioTot"] = Web3.from_wei(quoteD[0], shift)
     contracts.contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], shift)
-    # print("BALANCES:",quote,contracts.contracts[quote]["mainnetBal"], contracts.contracts[quote]["portfolioTot"], contracts.contracts[quote]["portfolioAvail"])
+    print("BALANCES:",quote,contracts.contracts[quote]["mainnetBal"], contracts.contracts[quote]["portfolioTot"], contracts.contracts[quote]["portfolioAvail"])
   
 
 

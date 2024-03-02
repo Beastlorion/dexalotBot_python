@@ -9,6 +9,7 @@ from eth_account.signers.local import LocalAccount
 from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
 from eth_account.messages import encode_defunct
 ERC20ABIf = open('./ABIs/ERC20ABI.json')
+savaxABIf = open('./ABIs/savax_ABI.json')
 
 config = {
     **dotenv_values(".env.shared"),
@@ -21,7 +22,9 @@ tokenDetails = None
 address = None
 signature = None
 ERC20ABI = json.load(ERC20ABIf)
+savaxABI = json.load(savaxABIf)
 nonce = 0
+status = True
 pendingTransactions = []
 activeOrders = []
 
@@ -119,6 +122,9 @@ async def initializeContracts(market,pairStr):
   contracts["OrderBooks"]["id0"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairStr.encode('utf-8'), 0).call()
   contracts["OrderBooks"]["id1"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairStr.encode('utf-8'), 1).call()
   
+  if base == 'sAVAX':
+    contracts["sAVAX"]["proxy"] = contracts["AvaxcProvider"]["provider"].eth.contract(address='0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE', abi=savaxABI)
+  
   tokens = await getTokenDetails()
   for item in tokens:
     if item["symbol"] in contracts and item["symbol"] != "AVAX":
@@ -146,7 +152,7 @@ def incrementNonce():
   global nonce
   nonce = nonce + 1
   
-def startBlockFilter():
+async def startBlockFilter():
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
   # worker.start()
@@ -180,7 +186,9 @@ async def log_loop(event_filter, poll_interval):
         for tx in transactionsProcessed:
           pendingTransactions.remove(tx)
     except:
+      global status
       print("exception, closing block filter")
+      status = False
     await asyncio.sleep(poll_interval)
     
 def newPendingTx(purpose,hash,clientOrderIDs = []):

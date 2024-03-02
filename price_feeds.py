@@ -2,6 +2,7 @@ import time, ast, asyncio
 import urllib.request
 from binance import AsyncClient, BinanceSocketManager
 import tools
+import contracts
 
 api_key = ''
 api_secret = ''
@@ -15,13 +16,15 @@ async def startPriceFeed(market):
   
   client = await AsyncClient.create()
   bm = BinanceSocketManager(client)
-  if (quote == "USDC" and base != "EUROC" and base != "USDt"):
+  if quote == "USDC" and base != "EUROC" and base != "USDt":
     tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
     usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-  elif(base == "AVAX" and quote == "USDt"):
+  elif base == "AVAX" and quote == "USDt":
     tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
-  elif(base == "USDt" and quote == "USDC"):
+  elif base == "USDt" and quote == "USDC":
     usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+  elif base == "sAVAX":
+    savaxTickerTask = asyncio.create_task(savaxFeed())
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
@@ -34,6 +37,8 @@ async def startTicker(client, bm, base, quote):
   global marketPrice
   if base == "BTC.b":
     base = "BTC"
+  elif base == "WETH.e":
+    base = "ETH"
   symbol = base + 'USDT'
 
   # start any sockets here, i.e a trade socket
@@ -77,3 +82,8 @@ def getMarketPrice():
   return marketPrice
 
 # def getTickerPrice():
+async def savaxFeed():
+  global marketPrice
+  while True:
+    marketPrice = float(contracts.contracts["sAVAX"]["proxy"].functions.getPooledAvaxByShares(1000000).call()/1000000)
+    await asyncio.sleep(5)

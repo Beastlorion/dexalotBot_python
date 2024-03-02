@@ -27,7 +27,6 @@ async def start():
     return
     
   await asyncio.gather(
-    price_feeds.startPriceFeed(market),
     contracts.getDeployments("TradePairs"),
     contracts.getDeployments("Portfolio"),
     contracts.getDeployments("OrderBooks"),
@@ -35,7 +34,8 @@ async def start():
   await contracts.initializeProviders(market)
   await contracts.initializeContracts(market,pairStr)
   await contracts.refreshDexalotNonce()
-  contracts.startBlockFilter()
+  await price_feeds.startPriceFeed(market)
+  await contracts.startBlockFilter()
   await orderUpdater()
 
 async def orderUpdater():
@@ -43,7 +43,7 @@ async def orderUpdater():
   attempts = 0
   global activeOrders
   
-  while True:
+  while contracts.status:
     marketPrice = price_feeds.getMarketPrice()
     if marketPrice == 0:
       print("waiting for market data")
@@ -56,6 +56,7 @@ async def orderUpdater():
         await asyncio.sleep(1)
         continue
       else:
+        print("New market price:", marketPrice)
         attempts = 0
         contracts.pendingTransactions = []
         print("\n")
