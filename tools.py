@@ -49,7 +49,7 @@ def getSpread(marketPrice,priceChange,settings,funds,totalFunds,level,side):
 
 def getQty(price, side, level, availableFunds,pairObj):
   if side == 0:
-    print("AVAILABLE FUNDS IN QUOTE BID: ",availableFunds, "AMOUNT: ",level["qty"])
+    # print("AVAILABLE FUNDS IN QUOTE BID: ",availableFunds, "AMOUNT: ",level["qty"])
     if level["qty"] < availableFunds/price:
       return level["qty"]
     elif availableFunds > float(pairObj["mintrade_amnt"]):
@@ -57,7 +57,7 @@ def getQty(price, side, level, availableFunds,pairObj):
     else: 
       return 0
   elif side == 1:
-    print("AVAILABLE FUNDS ASK: ",availableFunds, "AMOUNT: ",level["qty"])
+    # print("AVAILABLE FUNDS ASK: ",availableFunds, "AMOUNT: ",level["qty"])
     if level["qty"] < availableFunds:
         return level["qty"]
     elif availableFunds * price > float(pairObj["mintrade_amnt"]):

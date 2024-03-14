@@ -173,7 +173,8 @@ async def log_loop(event_filter, poll_interval):
               if receipt.status == 1:
                 transactionsProcessed.append(tx)
                 if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
-                  activeOrders = activeOrders + tx['clientOrderIDs']
+                  activeOrders = activeOrders + tx['orders']
+                  print("ACTIVE ORDERS:", activeOrders)
                 print('transaction success:', tx['purpose'])
               elif tx['purpose'] == 'cancel':
                 print('cancel tx failed:', tx)
@@ -191,5 +192,5 @@ async def log_loop(event_filter, poll_interval):
       status = False
     await asyncio.sleep(poll_interval)
     
-def newPendingTx(purpose,hash,clientOrderIDs = []):
-  pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'clientOrderIDs':clientOrderIDs})
+def newPendingTx(purpose,hash,orders = []):
+  pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})

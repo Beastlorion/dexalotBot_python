@@ -36,10 +36,18 @@ async def start():
   await contracts.refreshDexalotNonce()
   await price_feeds.startPriceFeed(market)
   await contracts.startBlockFilter()
+  await orders.cancelAllOrders(pairStr)
   await orderUpdater()
 
 async def orderUpdater():
+  levels = []
   lastUpdatePrice = 0
+  for i in settings['levels']:
+    level = i
+    level['lastUpdatePrice'] = 0
+    if level['refreshTolerance'] is None:
+      level['refreshTolerance'] = settings['refreshTolerance']
+    levels.append(level)
   attempts = 0
   global activeOrders
   
@@ -49,8 +57,11 @@ async def orderUpdater():
       print("waiting for market data")
       await asyncio.sleep(2)
       continue
-    if abs(lastUpdatePrice - marketPrice)/marketPrice > float(settings["refreshTolerance"])/100:
-      
+    levelsToUpdate = 0
+    for level in levels:
+      if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
+        levelsToUpdate = int(level['level'])
+    if levelsToUpdate > 0:
       if len(contracts.pendingTransactions) > 0 and attempts < settings["refreshInterval"]:
         attempts = attempts + 1
         await asyncio.sleep(1)
@@ -61,14 +72,20 @@ async def orderUpdater():
         contracts.pendingTransactions = []
         print("\n")
 
+      try:
+        success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
+        if not success:
+          continue
+      except Exception as error:
+        print("error in cancelOrderLevels", error)
+        continue
       try: 
         await asyncio.gather(
-          orders.cancelAllOrders(pairStr),
           portfolio.getBalances(base, quote),
           orders.getBestOrders()
         )
       except Exception as error:
-        print("error in cancel and get positions calls", error)
+        print("error in getBalances and getBestOrders calls", error)
         continue
       
       priceChange = 0
@@ -80,8 +97,8 @@ async def orderUpdater():
       totalFunds = baseFunds * marketPrice + quoteFunds
       
       
-      buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj)
-      sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj)
+      buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj, levelsToUpdate)
+      sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj, levelsToUpdate)
       
       limit_orders = []
       limit_orders = buyOrders + sellOrders
@@ -92,6 +109,9 @@ async def orderUpdater():
           if not results:
             continue
           lastUpdatePrice = marketPrice
+          for level in levels:
+            if (int(level['level']) <= levelsToUpdate):
+              level['lastUpdatePrice'] = marketPrice
           continue
         except Exception as error:
           print("failed to place orders",error)
