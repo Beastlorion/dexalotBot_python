@@ -68,11 +68,12 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
       matched = False
       for record in contracts.activeOrders:
-        if a.replace('\x00','') == record["clientOrderID"].decode('utf-8') and record['level'] <= levelsToUpdate:
-          print('cancel level:', record['level'], levelsToUpdate, order)
-          orderIDs.append(order["id"])
-          ordersToCancel.append(record)
+        if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
           matched = True
+          if record['level'] <= levelsToUpdate:
+            print('cancel level:', record['level'], levelsToUpdate)
+            orderIDs.append(order["id"])
+            ordersToCancel.append(record)
           break
       if matched is False:
         print("CANCELLING MISSING ClientOrderID:", a.replace('\x00',''))
