@@ -67,56 +67,58 @@ async def orderUpdater():
         await asyncio.sleep(1)
         continue
       else:
+        marketPrice = price_feeds.getMarketPrice()
         print("New market price:", marketPrice)
         attempts = 0
         contracts.pendingTransactions = []
         print("\n")
-
-      try:
-        success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
-        if not success:
-          continue
-      except Exception as error:
-        print("error in cancelOrderLevels", error)
-        continue
-      try: 
-        await asyncio.gather(
-          portfolio.getBalances(base, quote),
-          orders.getBestOrders()
-        )
-      except Exception as error:
-        print("error in getBalances and getBestOrders calls", error)
-        continue
-      
       priceChange = 0
       if lastUpdatePrice != 0:
         priceChange = (abs(lastUpdatePrice - marketPrice)/lastUpdatePrice)*100
-      
-      baseFunds = float(contracts.contracts[base]["portfolioTot"])
-      quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
-      totalFunds = baseFunds * marketPrice + quoteFunds
-      
-      
-      buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj, levelsToUpdate)
-      sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj, levelsToUpdate)
-      
-      limit_orders = []
-      limit_orders = buyOrders + sellOrders
-      
-      if len(limit_orders) > 0:
-        try:
-          results = await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
-          if not results:
-            continue
-          lastUpdatePrice = marketPrice
-          for level in levels:
-            if (int(level['level']) <= levelsToUpdate):
-              level['lastUpdatePrice'] = marketPrice
-          continue
-        except Exception as error:
-          print("failed to place orders",error)
-          await contracts.refreshDexalotNonce()
-          continue
+      if (settings['useCancelReplace']):
+        orders.cancelReplaceOrders(marketPrice,priceChange,settings,baseFundsAvail,quoteFundsAvail,totalFunds, pairObj, pairStr, levelsToUpdate)
       else:
-        print("no orders to place")
+        try:
+          success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
+          if not success:
+            continue
+        except Exception as error:
+          print("error in cancelOrderLevels", error)
+          continue
+        try: 
+          await asyncio.gather(
+            portfolio.getBalances(base, quote),
+            orders.getBestOrders()
+          )
+        except Exception as error:
+          print("error in getBalances and getBestOrders calls", error)
+          continue
+        
+        baseFunds = float(contracts.contracts[base]["portfolioTot"])
+        quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
+        totalFunds = baseFunds * marketPrice + quoteFunds
+        
+        
+        buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj, levelsToUpdate)
+        sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj, levelsToUpdate)
+        
+        limit_orders = []
+        limit_orders = buyOrders + sellOrders
+        
+        if len(limit_orders) > 0:
+          try:
+            results = await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
+            if not results:
+              continue
+            lastUpdatePrice = marketPrice
+            for level in levels:
+              if (int(level['level']) <= levelsToUpdate):
+                level['lastUpdatePrice'] = marketPrice
+            continue
+          except Exception as error:
+            print("failed to place orders",error)
+            await contracts.refreshDexalotNonce()
+            continue
+        else:
+          print("no orders to place")
     await asyncio.sleep(1)

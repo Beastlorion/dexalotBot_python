@@ -72,6 +72,3 @@ async def getBalances(base, quote):
     contracts.contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], shift)
     # print("BALANCES:",quote,contracts.contracts[quote]["mainnetBal"], contracts.contracts[quote]["portfolioTot"], contracts.contracts[quote]["portfolioAvail"])
   
-
-
-# async def cancelAllOrders(pair):

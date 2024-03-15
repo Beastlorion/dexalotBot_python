@@ -1,7 +1,7 @@
 import sys, os, asyncio, time, ast, json
 from threading import Thread
 import shortuuid
-import contracts, tools
+import contracts, tools, portfolio
 from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
@@ -69,7 +69,7 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       matched = False
       for record in contracts.activeOrders:
         if a.replace('\x00','') == record["clientOrderID"].decode('utf-8') and record['level'] <= levelsToUpdate:
-          print('cancel level:', record['level'], levelsToUpdate)
+          print('cancel level:', record['level'], levelsToUpdate, order)
           orderIDs.append(order["id"])
           ordersToCancel.append(record)
           matched = True
@@ -188,3 +188,36 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
   contracts.newPendingTx('addOrderList',response,limit_orders)
   print("addLimitOrderList:", response.hex(), 'time: ',round(time.time()))
   return True
+
+async def cancelReplaceOrders(marketPrice,priceChange,settings,baseFunds,quoteFunds,totalFunds, pairObj, pairStr, levelsToUpdate):
+  try: 
+    await asyncio.gather(
+      portfolio.getBalances(base, quote),
+      orders.getBestOrders()
+    )
+  except Exception as error:
+    print("error in getBalances and getBestOrders calls during cancelReplace", error)
+    return False
+  
+  baseFunds = float(contracts.contracts[base]["portfolioTot"])
+  quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
+  totalFunds = baseFunds * marketPrice + quoteFunds
+  baseFundsAvail = float(contracts.contracts[base]["portfolioAvail"])
+  quoteFundsAvail = float(contracts.contracts[quote]["portfolioAvail"])
+  openOrders = await getOpenOrders(pairStr)
+  
+  ordersToUpdate = []
+  ordersToMove = []
+  for order in openOrders["rows"]:
+    a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
+    matched = False
+    for record in contracts.activeOrders:
+      if a.replace('\x00','') == record["clientOrderID"].decode('utf-8') and record['level'] <= levelsToUpdate:
+        print('cancel level:', record['level'], levelsToUpdate)
+        ordersToUpdate.append({'orderID':order["id"], 'level':record['level'], qtyAvail: float(order['quantity']) - float(order['quantityfilled'])})
+        matched = True
+        break
+    if matched is False:
+      print("CANCELLING MISSING ClientOrderID:", a.replace('\x00',''))
+      orderIDs.append(order["id"])
+    
