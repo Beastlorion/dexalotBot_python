@@ -127,10 +127,10 @@ async def initializeContracts(market,pairStr):
   
   tokens = await getTokenDetails()
   for item in tokens:
-    if item["symbol"] in contracts and item["symbol"] != "AVAX":
+    if item["symbol"] in contracts and item["symbol"] != "AVAX" and item["env"] == "production-multi-avax":
       contracts[item["symbol"]]["tokenDetails"] = item
       contracts[item["symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
-    elif item["symbol"] == "AVAX":
+    elif item["symbol"] == "AVAX" and item["env"] == "production-multi-avax":
       contracts[item["symbol"]]["tokenDetails"] = item
       
       
