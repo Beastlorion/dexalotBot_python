@@ -1,6 +1,4 @@
-import sys, os, asyncio, time, ast, json
-from operator import itemgetter
-import shortuuid
+import sys, os, asyncio, time, ast, json, shortuuid
 import contracts, tools, portfolio
 from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values

@@ -16,20 +16,18 @@ async def main():
     print("asyncio.CancelledError")
   except KeyboardInterrupt:
     print("KeyboardInterrupt")
-  except Exception as error:
-    print("error:",error)
   finally:
     print("CANCELLING ORDERS AND SHUTTING DOWN")
+    contracts.status = False
     await orders.cancelAllOrders(marketMaker.pairStr, True)
 
 # Start and run until complete
 # loop = asyncio.get_event_loop()
 # task = loop.create_task(main())
-asyncio.run(main())
 
 # Run until a certain condition or indefinitely
 # try:
-#   loop.run_until_complete(task)
+asyncio.run(main())
 # except KeyboardInterrupt:
 #   # Handle other shutdown signals here
 #   try:

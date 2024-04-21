@@ -32,6 +32,8 @@ async def start():
     tasks = []
     tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s)]
     res = await asyncio.gather(*tasks)
+  await aiohttp.ClientSession().close()
+    
     
   await contracts.initializeProviders(market)
   await contracts.initializeContracts(market,pairStr)
@@ -65,7 +67,7 @@ async def orderUpdater():
     if levelsToUpdate > 0:
       if len(contracts.pendingTransactions) > 0 and attempts < settings["refreshInterval"]:
         attempts = attempts + 1
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.2)
         continue
       else:
         attempts = 0
