@@ -1,9 +1,10 @@
 import sys, os, asyncio, time, ast, json
+from hexbytes import HexBytes
 import tools
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
-from web3 import Web3
+from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
@@ -27,13 +28,18 @@ nonce = 0
 status = True
 pendingTransactions = []
 activeOrders = []
+replaceStatus = 0
 
-async def getDeployments(dt):
+async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
-  contract = urllib.request.urlopen(url).read()
-  contract = json.loads(contract)
-  for item in contract :
-    contracts[item["contract_name"]] = item
+  # contract = urllib.request.urlopen(url).read()
+  # contract = json.loads(contract)
+  async with s.get(url) as r:
+    if r.status != 200:
+      r.raise_for_status()
+    contract = json.loads(await r.read())
+    for item in contract :
+      contracts[item["contract_name"]] = item
 
 async def getTokenDetails():
   url = config["apiUrl"] + "tokens/"
@@ -43,13 +49,17 @@ async def getTokenDetails():
 async def initializeProviders(market):
   contracts["SubNetProvider"] = {
     "provider": Web3(Web3.HTTPProvider(config["rpc_url"])),
+    # "provider": AsyncWeb3(AsyncHTTPProvider(config["rpc_url"])),
     "nonce": 0
   }
+  # await contracts["SubNetProvider"]['provider'].is_connected()
   contracts["SubNetProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
   contracts["AvaxcProvider"] = {
     "provider": Web3(Web3.HTTPProvider(config["avaxc_rpc_url"])),
+    # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
     "nonce": 0
   }
+  # await contracts["AvaxcProvider"]['provider'].is_connected()
   contracts["AvaxcProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
   private_key = config[market+"_pk"]
   assert private_key is not None, "You must set PRIVATE_KEY environment variable"
@@ -156,41 +166,62 @@ async def startBlockFilter():
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
   # worker.start()
-  asyncio.create_task(log_loop(block_filter, 2))
+  asyncio.create_task(log_loop(block_filter, 0.5))
     
 async def log_loop(event_filter, poll_interval):
-  global activeOrders
   print("start block filter")
-  while True:
-    try:
-      for event in event_filter.get_new_entries():
-        block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
-        transactionsProcessed = []
-        for hash in block.transactions:
-          for tx in pendingTransactions:
-            if tx["hash"] == hash:
-              receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
-              if receipt.status == 1:
-                transactionsProcessed.append(tx)
-                if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
-                  activeOrders = activeOrders + tx['orders']
-                  print("ACTIVE ORDERS:", activeOrders)
-                print('transaction success:', tx['purpose'])
-              elif tx['purpose'] == 'cancel':
-                print('cancel tx failed:', tx)
-                tx['status'] = 'failed'
-              else:
-                print('tx failed:', tx)
-                transactionsProcessed.append(tx)
-          # if tx['to'] == WETH_ADDRESS:
-          #     print(f'Found interaction with WETH contract! {tx}')
-        for tx in transactionsProcessed:
-          pendingTransactions.remove(tx)
-    except:
-      global status
-      print("exception, closing block filter")
-      status = False
+  while status:
+    if (len(pendingTransactions)>0):
+      events = event_filter.get_new_entries()
+      await asyncio.to_thread(handleEvents,events)
     await asyncio.sleep(poll_interval)
+
+def handleEvents(events):
+  global activeOrders, replaceStatus, status
+  for event in events:
+    try:
+      block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
+      transactionsProcessed = []
+      for hash in block.transactions:
+        for tx in pendingTransactions:
+          if tx["hash"] == hash:
+            receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
+            if receipt.status == 1:
+              transactionsProcessed.append(tx)
+              print('transaction success:', tx['purpose'])
+              if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
+                activeOrders = activeOrders + tx['orders']
+              elif tx['purpose'] == 'replaceOrderList':
+                replaceStatus = 1
+                for newOrder in tx['orders']:
+                  for oldOrder in activeOrders:
+                    if (newOrder['oldClientOrderID'] == oldOrder['clientOrderID']):
+                      activeOrders.remove(oldOrder)
+                      activeOrders.append(newOrder)
+                      break
+              elif tx['purpose'] == 'cancel':
+                for id in tx['orders']:
+                  for order in activeOrders:
+                    if (id == order['orderID']):
+                      activeOrders.remove(order)
+                      print('REMOVE ORDER:', order)
+            elif tx['purpose'] == 'cancel':
+              print('cancel tx failed:', tx)
+              tx['status'] = 'failed'
+            else:
+              print('tx failed:', tx)
+              if tx['purpose'] == 'replaceOrderList':
+                replaceStatus = 2
+              transactionsProcessed.append(tx)
+        # if tx['to'] == WETH_ADDRESS:
+        #     print(f'Found interaction with WETH contract! {tx}')
+      for tx in transactionsProcessed:
+        print("ACTIVE ORDERS:",activeOrders)
+        pendingTransactions.remove(tx)
+    except Exceptions as error:
+      print("error in blockfilter handleEvents:", error)
+      status = False
     
 def newPendingTx(purpose,hash,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})
+

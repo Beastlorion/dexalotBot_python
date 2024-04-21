@@ -29,7 +29,7 @@ async def startPriceFeed(market):
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
 async def usdtUpdater():
-  while 1:
+  while contracts.status:
     await updateUSDT()
     await asyncio.sleep(1)
 
@@ -45,7 +45,7 @@ async def startTicker(client, bm, base, quote):
   ts = bm.trade_socket(symbol)
   # then start receiving messages
   async with ts as tscm:
-    while True:
+    while contracts.status:
       res = await tscm.recv()
       priceUsdt = float(res["p"])
       if quote == "USDC" and usdcUsdt:
@@ -62,7 +62,7 @@ async def usdc_usdtTicker(client, bm, base, quote):
   ts = bm.trade_socket(symbol)
   # then start receiving messages
   async with ts as tscm:
-    while True:
+    while contracts.status:
       res = await tscm.recv()
       usdcUsdt = float(res["p"])
       if (base == "USDt" and quote == "USDC"):
@@ -84,6 +84,6 @@ def getMarketPrice():
 # def getTickerPrice():
 async def savaxFeed():
   global marketPrice
-  while True:
+  while contracts.status:
     marketPrice = float(contracts.contracts["sAVAX"]["proxy"].functions.getPooledAvaxByShares(1000000).call()/1000000)
     await asyncio.sleep(5)

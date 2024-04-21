@@ -1,4 +1,4 @@
-import sys, os, asyncio, time, ast
+import sys, os, asyncio, time, ast, aiohttp
 import tools, contracts, orders, portfolio
 from dotenv import load_dotenv, dotenv_values
 from decimal import *
@@ -21,23 +21,24 @@ pairByte32 = HexBytes(pairStr.encode('utf-8'))
 
 async def start():
   global pairObj
+        
   pairObj = await tools.getPairObj(pairStr,config["apiUrl"]);
   if (pairObj is None):
     print("failed to get pairObj")
     return
+  
+  
+  async with aiohttp.ClientSession() as s:
+    tasks = []
+    tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s)]
+    res = await asyncio.gather(*tasks)
     
-  await asyncio.gather(
-    contracts.getDeployments("TradePairs"),
-    contracts.getDeployments("Portfolio"),
-    contracts.getDeployments("OrderBooks"),
-  )
   await contracts.initializeProviders(market)
   await contracts.initializeContracts(market,pairStr)
   await contracts.refreshDexalotNonce()
-  await price_feeds.startPriceFeed(market)
-  await contracts.startBlockFilter()
   await orders.cancelAllOrders(pairStr)
-  await orderUpdater()
+  
+  await asyncio.gather(price_feeds.startPriceFeed(market),contracts.startBlockFilter(),orderUpdater())
 
 async def orderUpdater():
   levels = []
@@ -48,10 +49,10 @@ async def orderUpdater():
     if level['refreshTolerance'] is None:
       level['refreshTolerance'] = settings['refreshTolerance']
     levels.append(level)
-  attempts = 0
   global activeOrders
   
   while contracts.status:
+    attempts = 0
     marketPrice = price_feeds.getMarketPrice()
     if marketPrice == 0:
       print("waiting for market data")
@@ -67,16 +68,24 @@ async def orderUpdater():
         await asyncio.sleep(1)
         continue
       else:
-        marketPrice = price_feeds.getMarketPrice()
-        print("New market price:", marketPrice)
         attempts = 0
         contracts.pendingTransactions = []
         print("\n")
+        print("New market price:", marketPrice, time.time())
       priceChange = 0
       if lastUpdatePrice != 0:
         priceChange = (abs(lastUpdatePrice - marketPrice)/lastUpdatePrice)*100
       if (settings['useCancelReplace']):
-        orders.cancelReplaceOrders(marketPrice,priceChange,settings,baseFundsAvail,quoteFundsAvail,totalFunds, pairObj, pairStr, levelsToUpdate)
+        success = await orders.cancelReplaceOrders(base, quote, marketPrice, priceChange, settings, pairObj, pairStr, pairByte32, levelsToUpdate)
+        if success:
+          lastUpdatePrice = marketPrice
+          for level in levels:
+            if level['level'] <= levelsToUpdate:
+              level['lastUpdatePrice'] = lastUpdatePrice
+          continue
+        else:
+          await asyncio.sleep(2)
+          continue
       else:
         try:
           success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
@@ -94,15 +103,16 @@ async def orderUpdater():
           print("error in getBalances and getBestOrders calls", error)
           continue
         
-        baseFunds = float(contracts.contracts[base]["portfolioTot"])
-        quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
-        totalFunds = baseFunds * marketPrice + quoteFunds
+        totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
+        totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
+        availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
+        availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
+        totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
         
         
-        buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj, levelsToUpdate)
-        sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj, levelsToUpdate)
+        buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,totalQuoteFunds,totalFunds, pairObj, levelsToUpdate, availQuoteFunds)
+        sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,totalBaseFunds,totalFunds, pairObj, levelsToUpdate, availBaseFunds)
         
-        limit_orders = []
         limit_orders = buyOrders + sellOrders
         
         if len(limit_orders) > 0:

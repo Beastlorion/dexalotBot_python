@@ -1,5 +1,5 @@
 import sys, os, asyncio, time, ast, json
-from threading import Thread
+from operator import itemgetter
 import shortuuid
 import contracts, tools, portfolio
 from hexbytes import HexBytes
@@ -12,24 +12,38 @@ config = {
     **dotenv_values(".env.secret")
 }
 
+openOrders = None
 bestBid = None
 bestAsk = None
 
-async def getOpenOrders(pair):
-  url = config["signedApiUrl"] + "orders?pair=" + pair + "&category=0"
-  req = Request(url)
-  req.add_header('x-signature', contracts.signature)
-  openOrders = urlopen(req).read()
-  # print("open orders:",openOrders)
-  return json.loads(openOrders)
+failedReplaceAttempts = 0
 
-async def getBestOrders():
+def getOpenOrders(pair):
+  global openOrders
+  try:
+    url = config["signedApiUrl"] + "orders?pair=" + pair + "&category=0"
+    req = Request(url)
+    req.add_header('x-signature', contracts.signature)
+    openOrdersJson = urlopen(req).read()
+    # print("open orders:",openOrders)
+    openOrders = json.loads(openOrdersJson)
+  except Exception as error:
+    print("error in getOpenOrders:", error)
+  print("finished getting open orders:",time.time())
+  return openOrders
+
+def getBestOrders():
   global bestBid, bestAsk
   orderBooks = contracts.contracts["OrderBooks"]
-  currentBestBid = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id0"]).call();
-  currentBestAsk = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id1"]).call();
-  bestBid = currentBestBid[0]/1000000
-  bestAsk = currentBestAsk[0]/1000000
+  try:
+    currentBestBid = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id0"]).call();
+    currentBestAsk = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id1"]).call();
+    bestBid = currentBestBid[0]/1000000
+    bestAsk = currentBestAsk[0]/1000000
+  except Exception as error:
+    print("error in getBestOrders:", error)
+  print("finished getting best orders:",time.time())
+  return
   # if (this.tradePairIdentifier=="sAVAX/AVAX" || this.tradePairIdentifier=="COQ/AVAX"){
   #   this.currentBestBid = currentBestBid.div("1000000000000000000").toNumber()
   #   this.currentBestAsk = currentBestAsk.div("1000000000000000000").toNumber()
@@ -45,17 +59,19 @@ async def cancelOrderList(orderIDs):
   print("cancel orders:",orderIDs)
   if len(orderIDs) == 0:
     return False
-  
-  cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
-  contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(cancelTxGasest * 1.2)});
-  contracts.incrementNonce()
-  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-  contracts.newPendingTx('cancel',response)
+  try:
+    cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(cancelTxGasest * 1.2)});
+    contracts.incrementNonce()
+    response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    contracts.newPendingTx('cancel',response,orderIDs)
+  except Exception as error:
+    print("error in cancelOrderList", error)
   # print("cancelOrderList response:", response.hex(), round(time.time()))
   
 async def cancelOrderLevels(pairStr, levelsToUpdate):
   for i in range(5):
-    openOrders = await getOpenOrders(pairStr)
+    openOrders = await asyncio.to_thread(getOpenOrders, pairStr)
     if (len(openOrders["rows"])==len(contracts.activeOrders) or len(contracts.activeOrders) == 0):
       break
     else:
@@ -90,7 +106,7 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
   for i in range(5):
-    openOrders = await getOpenOrders(pairStr)
+    openOrders = await asyncio.to_thread(getOpenOrders, pairStr)
     if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
       break
     else:
@@ -104,12 +120,12 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
   else:
     print("no open orders to cancel")
   
-def generateBuyOrders(marketPrice,priceChange,settings,funds,totalFunds,pairObj, levelsToUpdate):
+def generateBuyOrders(marketPrice,priceChange,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds):
   orders = []
-  availableFunds = funds
+  availableFunds = availQuoteFunds
   for level in settings["levels"]:
     if int(level['level']) <= levelsToUpdate:
-      spread = tools.getSpread(marketPrice,priceChange,settings,funds,totalFunds,level,0)
+      spread = tools.getSpread(marketPrice,priceChange,settings,totalQuoteFunds,totalFunds,level,0)
       price = round(marketPrice * (1 - spread),pairObj["quotedisplaydecimals"])
       if price > bestAsk:
         price = bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"])
@@ -122,12 +138,12 @@ def generateBuyOrders(marketPrice,priceChange,settings,funds,totalFunds,pairObj,
       orders.append({'side':0,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8'))})
   return orders
 
-def generateSellOrders(marketPrice,priceChange,settings,funds,totalFunds,pairObj, levelsToUpdate):
+def generateSellOrders(marketPrice,priceChange,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds):
   orders = []
-  availableFunds = funds
+  availableFunds = availBaseFunds
   for level in settings["levels"]:
     if int(level['level']) <= levelsToUpdate:
-      spread = tools.getSpread(marketPrice,priceChange,settings,funds,totalFunds,level,1)
+      spread = tools.getSpread(marketPrice,priceChange,settings,totalBaseFunds,totalFunds,level,1)
       price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
       if price < bestBid:
         price = bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"])
@@ -139,8 +155,141 @@ def generateSellOrders(marketPrice,priceChange,settings,funds,totalFunds,pairObj
       availableFunds = availableFunds - qty
       orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8'))})
   return orders
+
+async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pairObj, pairStr, pairByte32, levelsToUpdate):
+  replaceOrders = []
+  newOrders = []
+  orderIDsToCancel = []
+  ordersToUpdate = []
   
-async def addLimitOrderList(limit_orders,pairObj,pairByte32):
+  global failedReplaceAttempts, openOrders
+  contracts.replaceStatus = 0
+  print("begin cancelReplace:",time.time())
+  
+  await asyncio.gather(
+    asyncio.to_thread(portfolio.getBalances,base, quote),
+    asyncio.to_thread(getBestOrders),
+    asyncio.to_thread(getOpenOrders, pairStr)
+  )
+  
+  totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
+  totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
+  totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
+  availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
+  availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
+  
+  for order in openOrders["rows"]:
+    a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
+    matches = []
+    for record in contracts.activeOrders:
+      if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
+        matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
+    if len(matches) == 0: # if no record, cancel order
+      print("UNMATCHED ORDER:", order, "\n", "record")
+      orderIDsToCancel.append(order["id"])
+    elif len(matches) > 1: # if more than one record, cancel order
+      print("DUPLICATE ORDER:", order, "\n", "record")
+      orderIDsToCancel.append(order["id"])
+    else:
+      for matched in matches:
+        if matched['level'] <= levelsToUpdate:
+          ordersToUpdate.append(matched)
+  
+  if len(orderIDsToCancel) > 0 and failedReplaceAttempts < 2:
+    print("----------- Wait for order updates -----------", failedReplaceAttempts)
+    failedReplaceAttempts = failedReplaceAttempts + 1
+    return False
+  elif failedReplaceAttempts >= 2 or len(orderIDsToCancel) == 0:
+    failedReplaceAttempts = 0
+      
+  for order in ordersToUpdate:
+    if order['side'] == 0:
+      availQuoteFunds = availQuoteFunds + order['qtyLeft'] * order['price']
+    elif order['side'] == 1:
+      availBaseFunds = availBaseFunds + order['qtyLeft']
+      
+  buyOrders = generateBuyOrders(marketPrice,priceChange,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds)
+  sellOrders = generateSellOrders(marketPrice,priceChange,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds)
+  
+  limit_orders = buyOrders + sellOrders
+  
+  for newOrder in limit_orders:
+    matches = []
+    for oldOrder in ordersToUpdate:
+      if newOrder['side'] == oldOrder['side'] and newOrder['level'] == oldOrder['level']:
+        newOrder['orderID'] = oldOrder['orderID']
+        newOrder['oldClientOrderID'] = oldOrder['clientOrderID']
+        if newOrder['side'] == 0:
+          newOrder['costDif'] = (newOrder['qty'] * newOrder['price']) - (oldOrder['qtyLeft'] * oldOrder['price'])
+        else:
+          newOrder['costDif'] = newOrder['qty'] - oldOrder['qtyLeft']
+        matches.append(newOrder)
+    if len(matches) == 0:
+      newOrders.append(newOrder)
+      
+    elif len(matches) == 1:
+      replaceOrders = replaceOrders + matches
+    elif len(matches) > 1:
+      for orderToCancel in matches:
+        orderIDsToCancel = orderIDsToCancel + matches['orderID']
+  if len(orderIDsToCancel) > 0:
+    print("ORDERS TO CANCEL:", orderIDsToCancel)
+    await cancelOrderList(orderIDsToCancel)
+  
+  replaceTx = False
+  if len(replaceOrders) > 0:
+    replaceOrderList(replaceOrders, pairObj)
+    replaceTx = True
+  
+  if len(newOrders) > 0:
+    addLimitOrderList(newOrders,pairObj,pairByte32)
+  
+  if replaceTx:
+    for x in range(100):
+      if contracts.replaceStatus == 1:
+        return True
+      elif contracts.replaceStatus == 2:
+        return False
+      await asyncio.sleep(0.5)
+  return True
+
+def replaceOrderList(orders, pairObj):
+  sortedOrders = sorted(orders, key = lambda d: d['costDif'])
+  print('replace orders:',time.time(), 'orders:', sortedOrders)
+  
+  updateIDs = []
+  clientOrderIDs = []
+  prices = []
+  quantities = []
+  
+  for order in sortedOrders:
+    updateIDs.append(order['orderID'])
+    clientOrderIDs.append(order['clientOrderID'])
+    prices.append(int(order["price"]*pow(10, int(pairObj["quote_evmdecimals"]))))
+    quantities.append(int(order["qty"]*pow(10, int(pairObj["base_evmdecimals"]))))
+  
+  try:
+    gasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
+      updateIDs,
+      clientOrderIDs,
+      prices,
+      quantities
+    ).estimate_gas()
+    
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
+      updateIDs,
+      clientOrderIDs,
+      prices,
+      quantities
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(gasest * 1.2)});
+    contracts.incrementNonce()
+    replaceTx = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    contracts.newPendingTx('replaceOrderList',replaceTx,sortedOrders)
+  except Exception as error:
+    print('error in replaceOrderList:', error)
+  return replaceTx
+
+def addLimitOrderList(limit_orders,pairObj,pairByte32):
   prices = []
   quantities = []
   sides = []
@@ -153,20 +302,8 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
     sides.append(order["side"])
     clientOrderIDs.append(order['clientOrderID'])
     type2s.append(3)
-  
-  status = True
-  for x in range(8):
-    if len(contracts.pendingTransactions) > 0:
-      for tx in contracts.pendingTransactions:
-        if tx["status"] == 'failed':
-          status = False
-          contracts.pendingTransactions.remove(tx)
-    else:
-      break
-    if (status is False or contracts.freezeNewOrders):
-      return False
-    await asyncio.sleep(1)
-  print(limit_orders, len(limit_orders), 'time:',time.time())
+
+  print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
   gasest = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
     pairByte32,
     clientOrderIDs,
@@ -187,38 +324,5 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
   contracts.incrementNonce()
   response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
   contracts.newPendingTx('addOrderList',response,limit_orders)
-  print("addLimitOrderList:", response.hex(), 'time: ',round(time.time()))
+  print("addLimitOrderList response:", response.hex(), 'time: ',round(time.time()))
   return True
-
-async def cancelReplaceOrders(marketPrice,priceChange,settings,baseFunds,quoteFunds,totalFunds, pairObj, pairStr, levelsToUpdate):
-  try: 
-    await asyncio.gather(
-      portfolio.getBalances(base, quote),
-      orders.getBestOrders()
-    )
-  except Exception as error:
-    print("error in getBalances and getBestOrders calls during cancelReplace", error)
-    return False
-  
-  baseFunds = float(contracts.contracts[base]["portfolioTot"])
-  quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
-  totalFunds = baseFunds * marketPrice + quoteFunds
-  baseFundsAvail = float(contracts.contracts[base]["portfolioAvail"])
-  quoteFundsAvail = float(contracts.contracts[quote]["portfolioAvail"])
-  openOrders = await getOpenOrders(pairStr)
-  
-  ordersToUpdate = []
-  ordersToMove = []
-  for order in openOrders["rows"]:
-    a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
-    matched = False
-    for record in contracts.activeOrders:
-      if a.replace('\x00','') == record["clientOrderID"].decode('utf-8') and record['level'] <= levelsToUpdate:
-        print('cancel level:', record['level'], levelsToUpdate)
-        ordersToUpdate.append({'orderID':order["id"], 'level':record['level'], qtyAvail: float(order['quantity']) - float(order['quantityfilled'])})
-        matched = True
-        break
-    if matched is False:
-      print("CANCELLING MISSING ClientOrderID:", a.replace('\x00',''))
-      orderIDs.append(order["id"])
-    

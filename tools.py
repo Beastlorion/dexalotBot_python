@@ -2,6 +2,7 @@ import sys, os, asyncio, time, ast, json
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
+from multiprocessing import Process
 
 def getSymbolFromName(market,position):
   return market.split('_')[position]
@@ -66,4 +67,13 @@ def getQty(price, side, level, availableFunds,pairObj):
       return 0
   else: 
     return 0
+  
+def runInParallel(*fns):
+  proc = []
+  for fn in fns:
+    p = Process(target=fn)
+    p.start()
+    proc.append(p)
+  for p in proc:
+    p.join()
   
