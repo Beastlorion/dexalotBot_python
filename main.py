@@ -26,8 +26,10 @@ async def main():
 # task = loop.create_task(main())
 
 # Run until a certain condition or indefinitely
-# try:
-asyncio.run(main())
+try:
+  asyncio.run(main())
+except:
+  print("FINISHED")
 # except KeyboardInterrupt:
 #   # Handle other shutdown signals here
 #   try:

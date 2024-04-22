@@ -133,7 +133,7 @@ def generateBuyOrders(marketPrice,priceChange,settings,totalQuoteFunds,totalFund
       if qty > float(pairObj["maxtrade_amnt"]) :
         qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
       availableFunds = availableFunds - (qty * price)
-      orders.append({'side':0,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8'))})
+      orders.append({'side':0,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time()})
   return orders
 
 def generateSellOrders(marketPrice,priceChange,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds):
@@ -151,7 +151,7 @@ def generateSellOrders(marketPrice,priceChange,settings,totalBaseFunds,totalFund
       if qty > float(pairObj["maxtrade_amnt"]) :
         qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
       availableFunds = availableFunds - qty
-      orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8'))})
+      orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time()})
   return orders
 
 async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pairObj, pairStr, pairByte32, levelsToUpdate):
@@ -224,12 +224,19 @@ async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pai
         matches.append(newOrder)
     if len(matches) == 0:
       newOrders.append(newOrder)
-      
     elif len(matches) == 1:
       replaceOrders = replaceOrders + matches
     elif len(matches) > 1:
+      print("MATCHES with duplicate:",matches)
       for orderToCancel in matches:
         orderIDsToCancel = orderIDsToCancel + matches['orderID']
+    # if len(matches) > 1:
+    #   sortedMatches = sorted(matches, key = lambda d: d['timestamp'])
+    #   matches = sortedMatches[-1]
+    # if len(matches) == 0:
+    #   newOrders.append(newOrder)
+    # elif len(matches) == 1:
+    #   replaceOrders = replaceOrders + matches
   if len(orderIDsToCancel) > 0:
     print("ORDERS TO CANCEL:", orderIDsToCancel)
     await cancelOrderList(orderIDsToCancel)

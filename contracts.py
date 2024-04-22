@@ -173,59 +173,65 @@ async def log_loop(event_filter, poll_interval):
   while status:
     events = event_filter.get_new_entries()
     eventsToWatch = []
-    if (len(events)>2):
-      for i in range(3)+1:
-        eventsToWatch.append(events[len(events)-i])
+    if (len(events)>1):
+      for e in reversed(events):
+        eventsToWatch.append(e)
+        if len(eventsToWatch)>=3:
+          break
     else:
       eventsToWatch = events
-    await asyncio.to_thread(handleEvents,eventsToWatch)
+    tasks = []
+    for event in eventsToWatch:
+      tasks.append(asyncio.to_thread(handleEvents,event))
+    if len(tasks)>0:
+      await asyncio.gather(*tasks)
+      # handleEvents(event)
     await asyncio.sleep(poll_interval)
 
-def handleEvents(events):
+def handleEvents(event):
   global activeOrders, replaceStatus, status
-  for event in events:
-    try:
-      block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
-      transactionsProcessed = []
-      for hash in block.transactions:
-        for tx in pendingTransactions:
-          if tx["hash"] == hash:
-            receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
-            if receipt.status == 1:
-              transactionsProcessed.append(tx)
-              print('transaction success:', tx['purpose'])
-              if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
-                activeOrders = activeOrders + tx['orders']
-              elif tx['purpose'] == 'replaceOrderList':
-                replaceStatus = 1
-                for newOrder in tx['orders']:
-                  for oldOrder in activeOrders:
-                    if (newOrder['oldClientOrderID'] == oldOrder['clientOrderID']):
-                      activeOrders.remove(oldOrder)
-                      activeOrders.append(newOrder)
-                      break
-              elif tx['purpose'] == 'cancel':
-                for id in tx['orders']:
-                  for order in activeOrders:
-                    if (id == order['orderID']):
-                      activeOrders.remove(order)
-                      print('REMOVE ORDER:', order)
+  try:
+    block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
+    transactionsProcessed = []
+    for hash in block.transactions:
+      for tx in pendingTransactions:
+        if tx["hash"] == hash:
+          receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
+          if receipt.status == 1:
+            transactionsProcessed.append(tx)
+            print('transaction success:', tx['purpose'])
+            if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
+              activeOrders = activeOrders + tx['orders']
+            elif tx['purpose'] == 'replaceOrderList':
+              replaceStatus = 1
+              for newOrder in tx['orders']:
+                for oldOrder in activeOrders:
+                  if (newOrder['oldClientOrderID'] == oldOrder['clientOrderID']):
+                    activeOrders.remove(oldOrder)
+                    activeOrders.append(newOrder)
+                    break
             elif tx['purpose'] == 'cancel':
-              print('cancel tx failed:', tx)
-              tx['status'] = 'failed'
-            else:
-              print('tx failed:', tx)
-              if tx['purpose'] == 'replaceOrderList':
-                replaceStatus = 2
-              transactionsProcessed.append(tx)
-        # if tx['to'] == WETH_ADDRESS:
-        #     print(f'Found interaction with WETH contract! {tx}')
-      for tx in transactionsProcessed:
-        print("ACTIVE ORDERS:",activeOrders)
-        pendingTransactions.remove(tx)
-    except Exceptions as error:
-      print("error in blockfilter handleEvents:", error)
-      status = False
+              for id in tx['orders']:
+                for order in activeOrders:
+                  if (id == order['orderID']):
+                    activeOrders.remove(order)
+                    print('REMOVE ORDER:', order)
+          elif tx['purpose'] == 'cancel':
+            print('cancel tx failed:', tx)
+            tx['status'] = 'failed'
+          else:
+            print('tx failed:', tx)
+            if tx['purpose'] == 'replaceOrderList':
+              replaceStatus = 2
+            transactionsProcessed.append(tx)
+      # if tx['to'] == WETH_ADDRESS:
+      #     print(f'Found interaction with WETH contract! {tx}')
+    for tx in transactionsProcessed:
+      print("ACTIVE ORDERS:",activeOrders)
+      pendingTransactions.remove(tx)
+  except Exception as error:
+    print("error in blockfilter handleEvents:", error)
+    status = False
     
 def newPendingTx(purpose,hash,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})
