@@ -171,9 +171,14 @@ async def startBlockFilter():
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
   while status:
-    if (len(pendingTransactions)>0):
-      events = event_filter.get_new_entries()
-      await asyncio.to_thread(handleEvents,events)
+    events = event_filter.get_new_entries()
+    eventsToWatch = []
+    if (len(events)>2):
+      for i in range(3)+1:
+        eventsToWatch.append(events[len(events)-i])
+    else:
+      eventsToWatch = events
+    await asyncio.to_thread(handleEvents,eventsToWatch)
     await asyncio.sleep(poll_interval)
 
 def handleEvents(events):
