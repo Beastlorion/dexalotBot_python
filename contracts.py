@@ -187,6 +187,7 @@ async def log_loop(event_filter, poll_interval):
       await asyncio.gather(*tasks)
       # handleEvents(event)
     await asyncio.sleep(poll_interval)
+  return
 
 def handleEvents(event):
   global activeOrders, replaceStatus, status
@@ -232,6 +233,8 @@ def handleEvents(event):
   except Exception as error:
     print("error in blockfilter handleEvents:", error)
     status = False
+    return
+  return
     
 def newPendingTx(purpose,hash,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})
