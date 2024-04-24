@@ -162,6 +162,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pai
   
   global failedReplaceAttempts, openOrders
   contracts.replaceStatus = 0
+  contracts.addStatus = 0
   print("begin cancelReplace:",time.time())
   
   await asyncio.gather(
@@ -180,6 +181,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pai
     a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
     matches = []
     for record in contracts.activeOrders:
+      print(a.replace('\x00',''), record["clientOrderID"].decode('utf-8'))
       if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
         matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
     if len(matches) == 0: # if no record, cancel order
@@ -246,14 +248,16 @@ async def cancelReplaceOrders(base, quote, marketPrice,priceChange,settings, pai
     replaceOrderList(replaceOrders, pairObj)
     replaceTx = True
   
+  addTx = False
   if len(newOrders) > 0:
     addLimitOrderList(newOrders,pairObj,pairByte32)
+    addTx = True
   
-  if replaceTx:
+  if replaceTx or addTx:
     for x in range(100):
-      if contracts.replaceStatus == 1:
+      if (contracts.replaceStatus == 1 or not replaceTx) and (contracts.addStatus == 1 or not addTx):
         return True
-      elif contracts.replaceStatus == 2:
+      elif (contracts.replaceStatus == 2 and replaceTx) or (contracts.addStatus == 2 and addTx):
         return False
       await asyncio.sleep(0.5)
   return True

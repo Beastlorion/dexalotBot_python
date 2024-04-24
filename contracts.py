@@ -29,6 +29,7 @@ status = True
 pendingTransactions = []
 activeOrders = []
 replaceStatus = 0
+addStatus = 0
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -190,7 +191,7 @@ async def log_loop(event_filter, poll_interval):
   return
 
 def handleEvents(event):
-  global activeOrders, replaceStatus, status
+  global status, activeOrders, replaceStatus, addStatus
   try:
     block = contracts["SubNetProvider"]["provider"].eth.get_block(event.hex())
     transactionsProcessed = []
@@ -202,6 +203,7 @@ def handleEvents(event):
             transactionsProcessed.append(tx)
             print('transaction success:', tx['purpose'])
             if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
+              addStatus = 1
               activeOrders = activeOrders + tx['orders']
             elif tx['purpose'] == 'replaceOrderList':
               replaceStatus = 1

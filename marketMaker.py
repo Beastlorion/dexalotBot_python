@@ -45,6 +45,7 @@ async def start():
 async def orderUpdater():
   levels = []
   lastUpdatePrice = 0
+  lastUpdateTime = 0
   for i in settings['levels']:
     level = i
     level['lastUpdatePrice'] = 0
@@ -54,7 +55,6 @@ async def orderUpdater():
   global activeOrders
   
   while contracts.status:
-    attempts = 0
     marketPrice = price_feeds.getMarketPrice()
     if marketPrice == 0:
       print("waiting for market data")
@@ -65,12 +65,10 @@ async def orderUpdater():
       if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
     if levelsToUpdate > 0:
-      if len(contracts.pendingTransactions) > 0 and attempts < settings["refreshInterval"]:
-        attempts = attempts + 1
+      if time.time() - lastUpdateTime < 3 and len(contracts.pendingTransactions) > 0:
         await asyncio.sleep(0.2)
         continue
       else:
-        attempts = 0
         contracts.pendingTransactions = []
         print("\n")
         print("New market price:", marketPrice, time.time())
@@ -80,6 +78,7 @@ async def orderUpdater():
       if (settings['useCancelReplace']):
         success = await orders.cancelReplaceOrders(base, quote, marketPrice, priceChange, settings, pairObj, pairStr, pairByte32, levelsToUpdate)
         if success:
+          lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice
           for level in levels:
             if level['level'] <= levelsToUpdate:
