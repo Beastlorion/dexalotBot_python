@@ -58,8 +58,9 @@ async def cancelOrderList(orderIDs):
   if len(orderIDs) == 0:
     return False
   try:
-    cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(cancelTxGasest * 1.2)});
+    # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
+    gas = len(orderIDs) * 400000
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
   except Exception as error:
@@ -285,19 +286,13 @@ def replaceOrderList(orders, pairObj):
     quantities.append(int(order["qty"]*pow(10, int(pairObj["base_evmdecimals"]))))
   
   try:
-    gasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
-      updateIDs,
-      clientOrderIDs,
-      prices,
-      quantities
-    ).estimate_gas()
-    
+    gas = len(sortedOrders) * 700000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
       updateIDs,
       clientOrderIDs,
       prices,
       quantities
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(gasest * 1.2)});
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
     contracts.incrementNonce()
     replaceTx = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
     contracts.newPendingTx('replaceOrderList',replaceTx,sortedOrders)
@@ -321,24 +316,19 @@ def addLimitOrderList(limit_orders,pairObj,pairByte32):
     type2s.append(3)
 
   print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
-  gasest = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
-    pairByte32,
-    clientOrderIDs,
-    prices,
-    quantities,
-    sides,
-    type2s
-  ).estimate_gas()
-  
-  contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
-    pairByte32,
-    clientOrderIDs,
-    prices,
-    quantities,
-    sides,
-    type2s
-  ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':round(gasest * 1.2)});
-  contracts.incrementNonce()
-  response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-  contracts.newPendingTx('addOrderList',response,limit_orders)
+  gas = len(limit_orders) * 700000
+  try:
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
+      pairByte32,
+      clientOrderIDs,
+      prices,
+      quantities,
+      sides,
+      type2s
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    contracts.incrementNonce()
+    response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    contracts.newPendingTx('addOrderList',response,limit_orders)
+  except Exception as error:
+    print('error in addLimitOrderList:', error)
   return True
