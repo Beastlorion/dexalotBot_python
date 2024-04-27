@@ -347,9 +347,9 @@ def handleEvents(event):
     return
   return
     
-def newPendingTx(purpose,hash,orders = []):
-  print('New pending transaction:', purpose, len(orders), hash.hex())
-  pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})
+def newPendingTx(purpose,orders = []):
+  print('New pending transaction:', purpose, len(orders))
+  pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
 def getBalances(base, quote):
   portfolio = contracts["PortfolioSub"]["deployedContract"]

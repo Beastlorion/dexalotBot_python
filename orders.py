@@ -255,11 +255,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   
   replaceTx = False
   if len(replaceOrders) > 0:
-    replaceTx = replaceOrderList(replaceOrders, pairObj)
+    replaceTx = True
+    asyncio.create_task(replaceOrderList(replaceOrders, pairObj))
   
   addTx = False
   if len(newOrders) > 0:
-    addTx = addLimitOrderList(newOrders,pairObj,pairByte32)
+    addTx = True
+    asyncio.create_task(addLimitOrderList(newOrders,pairObj,pairByte32))
   
   if replaceTx or addTx:
     for x in range(100):
@@ -270,7 +272,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       await asyncio.sleep(0.05)
   return True
 
-def replaceOrderList(orders, pairObj):
+async def replaceOrderList(orders, pairObj):
   sortedOrders = sorted(orders, key = lambda d: d['costDif'])
   print('replace orders:',time.time(), 'orders:', sortedOrders)
   
@@ -293,15 +295,15 @@ def replaceOrderList(orders, pairObj):
       prices,
       quantities
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    contracts.newPendingTx('replaceOrderList',sortedOrders)
     contracts.incrementNonce()
-    replaceTx = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-    contracts.newPendingTx('replaceOrderList',replaceTx,sortedOrders)
-    return True
+    await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    return
   except Exception as error:
     print('error in replaceOrderList:', error)
-  return replaceTx
+  return
 
-def addLimitOrderList(limit_orders,pairObj,pairByte32):
+async def addLimitOrderList(limit_orders,pairObj,pairByte32):
   prices = []
   quantities = []
   sides = []
@@ -326,9 +328,9 @@ def addLimitOrderList(limit_orders,pairObj,pairByte32):
       sides,
       type2s
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    contracts.newPendingTx('addOrderList',limit_orders)
     contracts.incrementNonce()
-    response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-    contracts.newPendingTx('addOrderList',response,limit_orders)
+    await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
   except Exception as error:
     print('error in addLimitOrderList:', error)
-  return True
+  return
