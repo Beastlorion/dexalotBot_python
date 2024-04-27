@@ -2,8 +2,6 @@ import sys, os, asyncio, time, ast, json
 from web3 import Web3
 import contracts
 from dotenv import load_dotenv, dotenv_values
-import urllib.request
-from urllib.request import Request, urlopen
 from eth_utils.units import units, decimal
 
 units.update(

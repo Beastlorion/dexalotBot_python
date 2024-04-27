@@ -1,10 +1,12 @@
 import sys, os, asyncio, time, ast, json
 from hexbytes import HexBytes
+from websockets.sync.client import connect
 import tools
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
 from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
+from eth_utils.units import units, decimal
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
@@ -17,6 +19,12 @@ config = {
     **dotenv_values(".env.secret")
 }
 
+units.update(
+    {
+        "8_dec": decimal.Decimal("100000000"),  # Add in 8 decimals
+    }
+)
+
 freezeNewOrders = False
 contracts = {}
 tokenDetails = None
@@ -28,6 +36,8 @@ nonce = 0
 status = True
 pendingTransactions = []
 activeOrders = []
+bestBid = None
+bestAsk = None
 replaceStatus = 0
 addStatus = 0
 
@@ -163,12 +173,111 @@ def incrementNonce():
   global nonce
   nonce = nonce + 1
   
-async def startBlockFilter():
+async def startDataFeeds(pairObj):
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
-  # worker = Thread(target=log_loop, args=(block_filter, .5), daemon=True)
-  # worker.start()
-  asyncio.create_task(log_loop(block_filter, 0.5))
+  # a = asyncio.create_task(log_loop(block_filter, 0.5))
+  b = asyncio.to_thread(dexalotOrderFeed)
+  c = asyncio.to_thread(dexalotBookFeed,pairObj)
+  d = asyncio.create_task(updateBalancesLoop(pairObj))
+  await asyncio.gather(b,c,d)
+  
+async def updateBalancesLoop(pairObj):
+  while status:
+    await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1])
+    await asyncio.sleep(2)
+  return
     
+  
+def dexalotBookFeed(pairObj):
+  global bestAsk,bestBid
+  print("dexalotBookFeed START")
+  msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":3}
+  with connect("wss://api.dexalot.com") as websocket:
+    websocket.send(json.dumps(msg))
+    while status:
+      try:
+        message = str(websocket.recv())
+        parsed = ast.literal_eval(message)
+        if parsed['type'] == 'orderBooks':
+          data = parsed['data']
+          bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
+          bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
+          # print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
+      except Exception as error:
+        print("error in dexalotBookFeed feed:", error)
+    msg = {"data":pairStr,"pair":pairStr,"type":"unsubscribe","decimal":3}
+    websocket.send(json.dumps(msg))
+    return
+        
+      
+def dexalotOrderFeed():
+  global addStatus, replaceStatus
+  print("dexalotOrderFeed START")
+  msg = {"type":"tradereventsubscribe", "signature":signature}
+  with connect("wss://api.dexalot.com") as websocket:
+    websocket.send(json.dumps(msg))
+    while status:
+      try:
+        message = str(websocket.recv())
+        parsed = ast.literal_eval(message)
+        data = parsed['data']
+        if parsed['type'] == "orderStatusUpdateEvent":
+          hex1 = HexBytes(data["clientOrderId"])
+          a = bytes(hex1).decode('utf-8')
+          clientOrderID = str(a.replace('\x00',''))
+          if (data['status'] in ['PARTIAL']):
+            for order in activeOrders:
+              if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                  print("PARTIAL FILL:",data)
+                  order['orderID'] = data['orderId']
+                  order['qty'] = float(data['quantity'])
+                  order['qtyFilled'] = float(data['quantityfilled'])
+                  order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
+                  order['price'] = float(data['price'])
+                  order['side'] = int(data['sideId'])
+          elif data['status'] in ['FILLED','EXPIRED','KILLED','CANCELLED']:
+            for order in activeOrders:
+              if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                print('Order',data['status'],'and removed from activeOrders:',parsed)
+                activeOrders.remove(order)
+          elif (data['status'] in ['NEW','REJECTED']):
+            for tx in pendingTransactions:
+              if tx['purpose'] in ['addOrderList','replaceOrderList'] :
+                for order in tx['orders']:
+                  if clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'NEW' and not order['tracked']:
+                    print("NEW ORDER:",clientOrderID)
+                    order['orderID'] = data['orderId']
+                    order['qty'] = float(data['quantity'])
+                    order['qtyFilled'] = float(data['quantityfilled'])
+                    order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
+                    order['price'] = float(data['price'])
+                    order['side'] = int(data['sideId'])
+                    if tx['purpose'] in ['replaceOrderList']:
+                      for oldOrder in activeOrders:
+                        if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                          activeOrders.remove(oldOrder)
+                    activeOrders.append(order)
+                    order['tracked'] = True
+                  elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'REJECTED':
+                    print("REJECTED ORDER:",clientOrderID)
+                    order['tracked'] = True
+                tracked = 0
+                for order in tx['orders']:
+                  if order['tracked']:
+                    tracked = tracked+1
+                if tracked == len(tx['orders']):
+                  print("COMPLETED",tx['purpose'],"ORDER TRACKING:", time.time())
+                  pendingTransactions.remove(tx)
+                  if (tx['purpose'] == 'addOrderList'):
+                    addStatus = 1
+                  elif (tx['purpose'] == 'replaceOrderList'):
+                    replaceStatus = 1
+      except Exception as error:
+        print("error in dexalotOrderFeed feed:", error)
+    msg = {"type":"tradereventsubscribe", "signature":signature}
+    websocket.send(json.dumps(msg))
+    return
+        
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
   while status:
@@ -201,7 +310,7 @@ def handleEvents(event):
           receipt = contracts["SubNetProvider"]["provider"].eth.get_transaction_receipt(hash)
           if receipt.status == 1:
             transactionsProcessed.append(tx)
-            print('transaction success:', tx['purpose'])
+            print('transaction success:', tx['purpose'], time.time())
             if tx['purpose'] == 'placeOrder' or tx['purpose'] == 'addOrderList':
               addStatus = 1
               activeOrders = activeOrders + tx['orders']
@@ -239,5 +348,65 @@ def handleEvents(event):
   return
     
 def newPendingTx(purpose,hash,orders = []):
+  print('New pending transaction:', purpose, len(orders), hash.hex())
   pendingTransactions.append({'purpose': purpose,'status':'pending','hash': hash,'orders':orders})
 
+def getBalances(base, quote):
+  portfolio = contracts["PortfolioSub"]["deployedContract"]
+  
+  try:
+    # get AVAX balances
+    avaxC = contracts["AvaxcProvider"]["provider"].eth.get_balance(address)
+    contracts["AVAX"]["mainnetBal"] = Web3.from_wei(avaxC, 'ether')
+    
+    avaxD = portfolio.functions.getBalance(address, "AVAX".encode('utf-8')).call()
+    contracts["AVAX"]["portfolioTot"] = Web3.from_wei(avaxD[0], 'ether')
+    contracts["AVAX"]["portfolioAvail"] = Web3.from_wei(avaxD[1], 'ether')
+    
+    # get ALOT balances
+    alotC = contracts["ALOT"]["deployedContract"].functions.balanceOf(address).call()
+    contracts["ALOT"]["mainnetBal"] = Web3.from_wei(alotC, 'ether')
+    
+    alotD = portfolio.functions.getBalance(address, "AVAX".encode('utf-8')).call()
+    contracts["AVAX"]["portfolioTot"] = Web3.from_wei(alotD[0], 'ether')
+    contracts["AVAX"]["portfolioAvail"] = Web3.from_wei(alotD[1], 'ether')
+    
+    # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
+    # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
+    
+    if base != "ALOT" and base != "AVAX":
+      decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+      shift = 'ether'
+      match decimals:
+        case 6:
+          shift = "lovelace"
+        case 8:
+          shift = "8_dec"
+      basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
+      contracts[base]["mainnetBal"] = Web3.from_wei(basec, shift)
+      
+      baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
+      contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], shift)
+      contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], shift)
+      # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
+    
+    if quote != "ALOT" and quote != "AVAX":
+      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+      shift = 'ether'
+      match decimals:
+        case 6:
+          shift = "lovelace"
+        case 8:
+          shift = "8_dec"
+      quoteC = contracts[quote]["deployedContract"].functions.balanceOf(address).call()
+      contracts[quote]["mainnetBal"] = Web3.from_wei(quoteC, shift)
+      
+      quoteD = portfolio.functions.getBalance(address, quote.encode('utf-8')).call()
+      contracts[quote]["portfolioTot"] = Web3.from_wei(quoteD[0], shift)
+      contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], shift)
+      # print("BALANCES:",quote,contracts[quote]["mainnetBal"], contracts[quote]["portfolioTot"], contracts[quote]["portfolioAvail"])
+  except Exception as error:
+    print("error in getBalances:", error)
+  print("finished getting balances:",time.time())
+  return
+  

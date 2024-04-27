@@ -35,17 +35,14 @@ def getIncrement(quoteDisplayDecimals):
       increment += '1'
   return float(increment);
     
-def getSpread(marketPrice,priceChange,settings,funds,totalFunds,level,side):
-  slip = 0
+def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0
   if side == 1:
     funds = funds * marketPrice
-  if priceChange > settings["refreshTolerance"] * 2:
-    slip = (priceChange/2)
   if (funds > totalFunds/2):
     multiple = ((funds/totalFunds) - .5) * 20
     defensiveSkew = multiple * settings["defensiveSkew"];
-  spread = slip/100 + defensiveSkew/100 + level["spread"]/100
+  spread = defensiveSkew/100 + level["spread"]/100
   return spread
 
 def getQty(price, side, level, availableFunds,pairObj):
