@@ -2,7 +2,7 @@ import sys, os, asyncio, time, ast, json
 from hexbytes import HexBytes
 from websockets.sync.client import connect
 import tools
-from dotenv import load_dotenv, dotenv_values
+from dotenv import dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
 from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
@@ -57,7 +57,7 @@ async def getTokenDetails():
   tokenDetails = json.loads(urllib.request.urlopen(url).read())
   return tokenDetails
 
-async def initializeProviders(market):
+async def initializeProviders(market,settings):
   contracts["SubNetProvider"] = {
     "provider": Web3(Web3.HTTPProvider(config["rpc_url"])),
     # "provider": AsyncWeb3(AsyncHTTPProvider(config["rpc_url"])),
@@ -72,7 +72,10 @@ async def initializeProviders(market):
   }
   # await contracts["AvaxcProvider"]['provider'].is_connected()
   contracts["AvaxcProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
-  private_key = config[market+"_pk"]
+  if len(settings['secret_name'])>0:
+    private_key = tools.getPrivateKey(market,settings)
+  else:
+    private_key = config[market+"_pk"]
   assert private_key is not None, "You must set PRIVATE_KEY environment variable"
   assert private_key.startswith("0x"), "Private key must start with 0x hex prefix"
 

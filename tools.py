@@ -1,4 +1,5 @@
-import sys, os, asyncio, time, ast, json
+import sys, os, asyncio, time, ast, json, boto3
+from botocore.exceptions import ClientError
 import price_feeds
 from dotenv import dotenv_values
 import urllib.request
@@ -66,3 +67,28 @@ def getQty(price, side, level, availableFunds,pairObj):
       return 0
   else: 
     return 0
+
+def getPrivateKey(market,settings):
+
+  secret_name = settings['secret_name']
+  region_name = settings['secret_location']
+
+  # Create a Secrets Manager client
+  session = boto3.session.Session()
+  client = session.client(
+      service_name='secretsmanager',
+      region_name=region_name
+  )
+
+  try:
+      get_secret_value_response = client.get_secret_value(
+          SecretId=secret_name
+      )
+  except ClientError as e:
+      # For a list of exceptions thrown, see
+      # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+      raise e
+
+  secret = get_secret_value_response['SecretString']
+  pk = secret[secret_name]
+  return pk

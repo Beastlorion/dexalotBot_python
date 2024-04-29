@@ -1,5 +1,5 @@
 import sys, os, asyncio, time, ast, aiohttp
-import tools, contracts, orders
+import settings, tools, contracts, orders
 from dotenv import dotenv_values
 from decimal import *
 from hexbytes import HexBytes
@@ -13,7 +13,7 @@ config = {
 pairObj = None
 activeOrders = []
 market = sys.argv[1]
-settings = ast.literal_eval(config[market])
+settings = settings.settings[market]
 base = tools.getSymbolFromName(market,0)
 quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
@@ -35,7 +35,7 @@ async def start():
   await aiohttp.ClientSession().close()
     
     
-  await contracts.initializeProviders(market)
+  await contracts.initializeProviders(market,settings)
   await contracts.initializeContracts(market,pairStr)
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
