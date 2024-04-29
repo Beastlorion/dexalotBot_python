@@ -40,7 +40,9 @@ async def start():
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
   await asyncio.sleep(4)
+  
   contracts.getBalances(base,quote)
+  orders.getBestOrders()
   await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater())
   contracts.status = False
   asincio.sleep(2)

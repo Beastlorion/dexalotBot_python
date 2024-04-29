@@ -11,8 +11,6 @@ config = {
 }
 
 openOrders = None
-bestBid = None
-bestAsk = None
 
 failedReplaceAttempts = 0
 
@@ -31,13 +29,12 @@ def getOpenOrders(pair):
   return openOrders
 
 def getBestOrders():
-  global bestBid, bestAsk
   orderBooks = contracts.contracts["OrderBooks"]
   try:
     currentBestBid = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id0"]).call();
     currentBestAsk = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id1"]).call();
-    bestBid = currentBestBid[0]/1000000
-    bestAsk = currentBestAsk[0]/1000000
+    contracts.bestBid = currentBestBid[0]/1000000
+    contracts.bestAsk = currentBestAsk[0]/1000000
   except Exception as error:
     print("error in getBestOrders:", error)
   print("finished getting best orders:",time.time())
