@@ -89,6 +89,8 @@ def getPrivateKey(market,settings):
       # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
       raise e
 
-  secret = get_secret_value_response['SecretString']
+  secret = ast.literal_eval(get_secret_value_response['SecretString'])
   pk = secret[secret_name]
+  if pk[:2] != '0x':
+    pk = '0x' + pk
   return pk
