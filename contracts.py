@@ -348,7 +348,7 @@ def handleEvents(event):
   return
     
 def newPendingTx(purpose,orders = []):
-  print('New pending transaction:', purpose, len(orders))
+  print('New pending transaction:', purpose, len(orders), time.time())
   pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
 def getBalances(base, quote):

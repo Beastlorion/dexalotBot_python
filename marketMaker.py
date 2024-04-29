@@ -39,7 +39,7 @@ async def start():
   await contracts.initializeContracts(market,pairStr)
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
-  await asyncio.sleep(6)
+  await asyncio.sleep(4)
   contracts.getBalances(base,quote)
   await asyncio.gather(price_feeds.startPriceFeed(market),contracts.startDataFeeds(pairObj),orderUpdater())
   contracts.status = False
@@ -68,11 +68,15 @@ async def orderUpdater():
       if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
     if levelsToUpdate > 0:
-      if time.time() - lastUpdateTime < 3 and len(contracts.pendingTransactions) > 0:
+      if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
         await asyncio.sleep(0.2)
         continue
-      else:
+      elif: time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
+        await orders.cancelAllOrders(pairStr)
+        await asyncio.sleep(4)
         contracts.pendingTransactions = []
+        continue
+      else:
         print("\n")
         print("New market price:", marketPrice, time.time())
       if (settings['useCancelReplace']):
