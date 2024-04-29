@@ -1,6 +1,6 @@
 import sys, os, asyncio, time, ast, aiohttp
 import tools, contracts, orders
-from dotenv import load_dotenv, dotenv_values
+from dotenv import dotenv_values
 from decimal import *
 from hexbytes import HexBytes
 import price_feeds
@@ -41,7 +41,7 @@ async def start():
   await orders.cancelAllOrders(pairStr)
   await asyncio.sleep(4)
   contracts.getBalances(base,quote)
-  await asyncio.gather(price_feeds.startPriceFeed(market),contracts.startDataFeeds(pairObj),orderUpdater())
+  await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater())
   contracts.status = False
   asincio.sleep(2)
 
@@ -58,7 +58,7 @@ async def orderUpdater():
   global activeOrders
   
   while contracts.status:
-    marketPrice = price_feeds.getMarketPrice()
+    marketPrice = price_feeds.marketPrice
     if marketPrice == 0 or contracts.bestAsk is None or contracts.bestBid is None:
       print("waiting for market data")
       await asyncio.sleep(2)
@@ -71,10 +71,11 @@ async def orderUpdater():
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
         await asyncio.sleep(0.2)
         continue
-      elif: time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
+      elif time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
         await orders.cancelAllOrders(pairStr)
         await asyncio.sleep(4)
         contracts.pendingTransactions = []
+        contracts.activeOrders = []
         continue
       else:
         print("\n")

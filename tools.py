@@ -1,5 +1,6 @@
 import sys, os, asyncio, time, ast, json
-from dotenv import load_dotenv, dotenv_values
+import price_feeds
+from dotenv import dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
 from multiprocessing import Process
@@ -37,12 +38,13 @@ def getIncrement(quoteDisplayDecimals):
     
 def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0
+  volSpread = price_feeds.volSpread
   if side == 1:
     funds = funds * marketPrice
   if (funds > totalFunds/2):
     multiple = ((funds/totalFunds) - .5) * 20
     defensiveSkew = multiple * settings["defensiveSkew"];
-  spread = defensiveSkew/100 + level["spread"]/100
+  spread = defensiveSkew/100 + level["spread"]/100 + volSpread
   return spread
 
 def getQty(price, side, level, availableFunds,pairObj):

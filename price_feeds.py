@@ -1,4 +1,4 @@
-import time, ast, asyncio
+import time, ast, asyncio, aiohttp, json
 import urllib.request
 from binance import AsyncClient, BinanceSocketManager
 import tools
@@ -9,22 +9,27 @@ api_secret = ''
 usdt = 0
 usdcUsdt = 0
 marketPrice = 0
+volSpread = 0
 
-async def startPriceFeed(market):
+async def startPriceFeed(market,settings):
   base = tools.getSymbolFromName(market,0)
   quote = tools.getSymbolFromName(market,1)
-  
-  client = await AsyncClient.create()
-  bm = BinanceSocketManager(client)
-  if quote == "USDC" and base != "EUROC" and base != "USDt":
-    tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
-    usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-  elif base == "AVAX" and quote == "USDt":
-    tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
-  elif base == "USDt" and quote == "USDC":
-    usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-  elif base == "sAVAX":
-    savaxTickerTask = asyncio.create_task(savaxFeed())
+  if settings['useVolSpread']:
+    asyncio.create_task(getVolSpread(base,quote))
+  if settings['useCustomPrice']:
+    asyncio.create_task(getCustomPrice(base,quote))
+  else:
+    client = await AsyncClient.create()
+    bm = BinanceSocketManager(client)
+    if quote == "USDC" and base != "EUROC" and base != "USDT":
+      tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
+      usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+    elif base == "AVAX" and quote == "USDT":
+      tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
+    elif base == "USDT" and quote == "USDC":
+      usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+    elif base == "sAVAX":
+      savaxTickerTask = asyncio.create_task(savaxFeed())
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
@@ -35,13 +40,14 @@ async def usdtUpdater():
 
 async def startTicker(client, bm, base, quote):
   global marketPrice
-  if base == "BTC.b":
+  if base == "BTC":
     base = "BTC"
-  elif base == "WETH.e":
+  elif base == "ETH":
     base = "ETH"
   symbol = base + 'USDT'
 
   # start any sockets here, i.e a trade socket
+  print("starting ticker:", symbol)
   ts = bm.trade_socket(symbol)
   # then start receiving messages
   async with ts as tscm:
@@ -50,7 +56,7 @@ async def startTicker(client, bm, base, quote):
       priceUsdt = float(res["p"])
       if quote == "USDC" and usdcUsdt:
         marketPrice = priceUsdt * usdcUsdt
-      elif (quote == "USDt"):
+      elif (quote == "USDT"):
         marketPrice = priceUsdt
   await client.close_connection()
   
@@ -65,7 +71,7 @@ async def usdc_usdtTicker(client, bm, base, quote):
     while contracts.status:
       res = await tscm.recv()
       usdcUsdt = float(res["p"])
-      if (base == "USDt" and quote == "USDC"):
+      if (base == "USDT" and quote == "USDC"):
         marketPrice = 1/usdcUsdt
   await client.close_connection()
 
@@ -80,6 +86,8 @@ async def updateUSDT():
 
 def getMarketPrice():
   return marketPrice
+def getVolPrice():
+  return marketPrice
 
 # def getTickerPrice():
 async def savaxFeed():
@@ -87,3 +95,36 @@ async def savaxFeed():
   while contracts.status:
     marketPrice = float(contracts.contracts["sAVAX"]["proxy"].functions.getPooledAvaxByShares(1000000).call()/1000000)
     await asyncio.sleep(5)
+
+async def getCustomPrice(base,quote):
+  global marketPrice
+  async with aiohttp.ClientSession() as s:
+    url='http://localhost:3000/prices'
+    while contracts.status:
+      try:
+        async with s.get(url) as r:
+          if r.status != 200:
+            r.raise_for_status()
+          prices = await r.read()
+          prices = json.loads(prices.decode('utf-8'))
+          basePrice = prices[base + '-USD']
+          quotePrice = prices[quote + '-USD']
+          marketPrice = basePrice/quotePrice
+      except Exception as error:
+        print("error in getCustomPrice:", error)
+      await asyncio.sleep(0.5)
+async def getVolSpread(base,quote):
+  global volSpread
+  async with aiohttp.ClientSession() as s:
+    url='http://localhost:3000/spreads'
+    while contracts.status:
+      try:
+        async with s.get(url) as r:
+          if r.status != 200:
+            r.raise_for_status()
+          spreads = await r.read()
+          spreads = json.loads(spreads.decode('utf-8'))
+          volSpread = spreads[base + '-USD']
+      except Exception as error:
+        print("error in getVolSpread:", error)
+      await asyncio.sleep(0.5)
