@@ -97,6 +97,7 @@ async def initializeProviders(market,settings):
   signature = address + ':' + signedMessage.signature.hex()
   contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
+  print('finished initializeProviders')
   
 async def initializeContracts(market,pairStr):
   base = tools.getSymbolFromName(market,0)
@@ -151,11 +152,13 @@ async def initializeContracts(market,pairStr):
   
   tokens = await getTokenDetails()
   for item in tokens:
-    if item["symbol"] in contracts and item["symbol"] != "AVAX":
-      contracts[item["symbol"]]["tokenDetails"] = item
-      contracts[item["symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
-    elif item["symbol"] == "AVAX":
-      contracts[item["symbol"]]["tokenDetails"] = item
+    if item["subnet_symbol"] in contracts and item["subnet_symbol"] != "AVAX":
+      contracts[item["subnet_symbol"]]["tokenDetails"] = item
+      contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+    elif item["subnet_symbol"] == "AVAX":
+      contracts[item["subnet_symbol"]]["tokenDetails"] = item
+  print('finished initializeContracts')
+  return
       
       
 def signTransaction(provider,tx):
