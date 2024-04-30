@@ -40,6 +40,7 @@ bestBid = None
 bestAsk = None
 replaceStatus = 0
 addStatus = 0
+refreshBalances = False
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -189,8 +190,9 @@ async def startDataFeeds(pairObj):
   
 async def updateBalancesLoop(pairObj):
   while status:
-    await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1])
-    await asyncio.sleep(2)
+    if (refreshBalances):
+      await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1])
+    await asyncio.sleep(0.5)
   return
     
   
@@ -217,7 +219,7 @@ def dexalotBookFeed(pairObj):
         
       
 def dexalotOrderFeed():
-  global addStatus, replaceStatus
+  global addStatus, replaceStatus, refreshBalances
   print("dexalotOrderFeed START")
   msg = {"type":"tradereventsubscribe", "signature":signature}
   with connect("wss://api.dexalot.com") as websocket:
@@ -232,6 +234,7 @@ def dexalotOrderFeed():
           a = bytes(hex1).decode('utf-8')
           clientOrderID = str(a.replace('\x00',''))
           if (data['status'] in ['PARTIAL']):
+            refreshBalances = True
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                   print("PARTIAL FILL:",data)
@@ -242,6 +245,7 @@ def dexalotOrderFeed():
                   order['price'] = float(data['price'])
                   order['side'] = int(data['sideId'])
           elif data['status'] in ['FILLED','EXPIRED','KILLED','CANCELLED']:
+            refreshBalances = True
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 print('Order',data['status'],'and removed from activeOrders:',parsed)
@@ -358,6 +362,8 @@ def newPendingTx(purpose,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
 def getBalances(base, quote):
+  print("get balances",time.time())
+  global refreshBalances
   portfolio = contracts["PortfolioSub"]["deployedContract"]
   
   try:
@@ -414,5 +420,6 @@ def getBalances(base, quote):
   except Exception as error:
     print("error in getBalances:", error)
   print("finished getting balances:",time.time())
+  refreshBalances = False
   return
   

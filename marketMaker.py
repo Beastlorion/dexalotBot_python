@@ -45,7 +45,7 @@ async def start():
   orders.getBestOrders()
   await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater())
   contracts.status = False
-  asincio.sleep(2)
+  asyncio.sleep(2)
 
 async def orderUpdater():
   levels = []
@@ -71,6 +71,7 @@ async def orderUpdater():
         levelsToUpdate = int(level['level'])
     if levelsToUpdate > 0:
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
+        print('waiting on pending transactions')
         await asyncio.sleep(0.2)
         continue
       elif time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
@@ -92,6 +93,7 @@ async def orderUpdater():
               level['lastUpdatePrice'] = lastUpdatePrice
           continue
         else:
+          contracts.refreshBalances = True
           await asyncio.sleep(2)
           continue
       else:

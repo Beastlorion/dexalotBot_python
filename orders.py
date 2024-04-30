@@ -174,8 +174,16 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
-  availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
-  availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
+  # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
+  # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
+  availBaseFunds = totalBaseFunds
+  availQuoteFunds = totalQuoteFunds
+  
+  for order in contracts.activeOrders:
+    if order['side'] == 0:
+      availQuoteFunds = availQuoteFunds - order['qtyLeft'] * order['price']
+    elif order['side'] == 1:
+      availBaseFunds = availBaseFunds - order['qtyLeft']
   
   # for order in openOrders["rows"]:
   #   a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
@@ -285,6 +293,7 @@ async def replaceOrderList(orders, pairObj):
     quantities.append(int(order["qty"]*pow(10, int(pairObj["base_evmdecimals"]))))
   
   try:
+    contracts.newPendingTx('replaceOrderList',sortedOrders)
     gas = len(sortedOrders) * 700000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
       updateIDs,
@@ -292,12 +301,14 @@ async def replaceOrderList(orders, pairObj):
       prices,
       quantities
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
-    contracts.newPendingTx('replaceOrderList',sortedOrders)
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     return
   except Exception as error:
     print('error in replaceOrderList:', error)
+    for tx in contracts.pendingTransactions:
+      if tx['purpose'] == 'replaceOrderList':
+        contracts.pendingTransactions.remove(tx)
   return
 
 async def addLimitOrderList(limit_orders,pairObj,pairByte32):
@@ -315,8 +326,9 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
     type2s.append(3)
 
   print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
-  gas = len(limit_orders) * 700000
   try:
+    contracts.newPendingTx('addOrderList',limit_orders)
+    gas = len(limit_orders) * 700000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
       pairByte32,
       clientOrderIDs,
@@ -325,9 +337,11 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32):
       sides,
       type2s
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
-    contracts.newPendingTx('addOrderList',limit_orders)
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
   except Exception as error:
     print('error in addLimitOrderList:', error)
+    for tx in contracts.pendingTransactions:
+      if tx['purpose'] == 'addOrderList':
+        contracts.pendingTransactions.remove(tx)
   return
