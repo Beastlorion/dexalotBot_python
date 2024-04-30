@@ -284,7 +284,7 @@ async def replaceOrderList(orders, pairObj):
   
   try:
     contracts.newPendingTx('replaceOrderList',sortedOrders)
-    gas = len(sortedOrders) * 6000000
+    gas = len(sortedOrders) * 1000000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
       updateIDs,
       clientOrderIDs,
