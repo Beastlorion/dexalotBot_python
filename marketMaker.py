@@ -51,6 +51,7 @@ async def orderUpdater():
   levels = []
   lastUpdatePrice = 0
   lastUpdateTime = 0
+  count = 0
   for i in settings['levels']:
     level = i
     level['lastUpdatePrice'] = 0
@@ -84,6 +85,8 @@ async def orderUpdater():
         print("\n")
         print("New market price:", marketPrice, time.time())
       if (settings['useCancelReplace']):
+        count = count+1
+        print('Replace orders count:',count, 'time:',time.time())
         for order in contracts.activeOrders:
           if order['status'] == 'CANCELED':
             contracts.activeOrders.remove(order)

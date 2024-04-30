@@ -183,7 +183,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   
   contracts.replaceStatus = 0
   contracts.addStatus = 0
-  print("begin cancelReplace:",time.time())
   
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
