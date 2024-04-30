@@ -112,7 +112,7 @@ async def getCustomPrice(base,quote):
           marketPrice = basePrice/quotePrice
       except Exception as error:
         print("error in getCustomPrice:", error)
-      await asyncio.sleep(0.5)
+      await asyncio.sleep(0.1)
 async def getVolSpread(base,quote):
   global volSpread
   async with aiohttp.ClientSession() as s:
@@ -127,4 +127,4 @@ async def getVolSpread(base,quote):
           volSpread = spreads[base + '-USD']
       except Exception as error:
         print("error in getVolSpread:", error)
-      await asyncio.sleep(0.5)
+      await asyncio.sleep(1)

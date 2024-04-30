@@ -14,7 +14,7 @@ openOrders = None
 
 failedReplaceAttempts = 0
 
-def getOpenOrders(pair):
+async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
   try:
     url = config["signedApiUrl"] + "orders?pair=" + pair + "&category=0"
@@ -23,6 +23,27 @@ def getOpenOrders(pair):
     openOrdersJson = urlopen(req).read()
     # print("open orders:",openOrders)
     openOrders = json.loads(openOrdersJson)
+    if len(contracts.activeOrders)>0 and refreshActiveOrders:
+      orderIDsToCancel = []
+      for order in openOrders["rows"]:
+        a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
+        matches = []
+        for record in contracts.activeOrders:
+          if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
+            matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
+            record['orderID'] = order["id"]
+            record['orderID'] = order["id"]
+            record['orderID'] = order["id"]
+            
+        if len(matches) == 0: # if no record, cancel order
+          print("UNMATCHED ORDER:", order, "\n", "record")
+          orderIDsToCancel.append(order["id"])
+        elif len(matches) > 1: # if more than one record, cancel order
+          print("DUPLICATE ORDER:", order, "\n", "record")
+          orderIDsToCancel.append(order["id"])
+        if len(orderIDsToCancel) > 0:
+          print("ORDERS TO CANCEL:", orderIDsToCancel)
+          await cancelOrderList(orderIDsToCancel)
   except Exception as error:
     print("error in getOpenOrders:", error)
   print("finished getting open orders:",time.time())
@@ -56,7 +77,7 @@ async def cancelOrderList(orderIDs):
     return False
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
-    gas = len(orderIDs) * 400000
+    gas = len(orderIDs) * 500000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
@@ -66,7 +87,7 @@ async def cancelOrderList(orderIDs):
   
 async def cancelOrderLevels(pairStr, levelsToUpdate):
   for i in range(5):
-    openOrders = await asyncio.to_thread(getOpenOrders, pairStr)
+    openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])==len(contracts.activeOrders) or len(contracts.activeOrders) == 0):
       break
     else:
@@ -101,7 +122,7 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
   for i in range(5):
-    openOrders = await asyncio.to_thread(getOpenOrders, pairStr)
+    openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
       break
     else:
@@ -157,19 +178,12 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate):
   replaceOrders = []
   newOrders = []
-  orderIDsToCancel = []
   ordersToUpdate = []
+  orderIDsToCancel = []
   
-  global failedReplaceAttempts, openOrders
   contracts.replaceStatus = 0
   contracts.addStatus = 0
   print("begin cancelReplace:",time.time())
-  
-  # await asyncio.gather(
-  #   asyncio.to_thread(contracts.getBalances,base, quote),
-  #   asyncio.to_thread(getBestOrders),
-  #   asyncio.to_thread(getOpenOrders, pairStr)
-  # )
   
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
@@ -184,31 +198,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       availQuoteFunds = availQuoteFunds - order['qtyLeft'] * order['price']
     elif order['side'] == 1:
       availBaseFunds = availBaseFunds - order['qtyLeft']
-  
-  # for order in openOrders["rows"]:
-  #   a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
-  #   matches = []
-  #   for record in contracts.activeOrders:
-  #     print(a.replace('\x00',''), record["clientOrderID"].decode('utf-8'))
-  #     if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
-  #       matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
-  #   if len(matches) == 0: # if no record, cancel order
-  #     print("UNMATCHED ORDER:", order, "\n", "record")
-  #     orderIDsToCancel.append(order["id"])
-  #   elif len(matches) > 1: # if more than one record, cancel order
-  #     print("DUPLICATE ORDER:", order, "\n", "record")
-  #     orderIDsToCancel.append(order["id"])
-  #   else:
-  #     for matched in matches:
-  #       if matched['level'] <= levelsToUpdate:
-  #         ordersToUpdate.append(matched)
-  
-  # if len(orderIDsToCancel) > 0 and failedReplaceAttempts < 2:
-  #   print("----------- Wait for order updates -----------", failedReplaceAttempts)
-  #   failedReplaceAttempts = failedReplaceAttempts + 1
-  #   return False
-  # elif failedReplaceAttempts >= 2 or len(orderIDsToCancel) == 0:
-  #   failedReplaceAttempts = 0
   
   for order in contracts.activeOrders:
     if order['level'] <= levelsToUpdate:
@@ -226,7 +215,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   
   if len(limit_orders) == 0:
     await asyncio.sleep(2)
-    return False
+    return True
   
   for newOrder in limit_orders:
     matches = []
@@ -275,6 +264,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       elif (contracts.replaceStatus == 2 and replaceTx) or (contracts.addStatus == 2 and addTx):
         return False
       await asyncio.sleep(0.05)
+    return False
   return True
 
 async def replaceOrderList(orders, pairObj):
@@ -294,7 +284,7 @@ async def replaceOrderList(orders, pairObj):
   
   try:
     contracts.newPendingTx('replaceOrderList',sortedOrders)
-    gas = len(sortedOrders) * 700000
+    gas = len(sortedOrders) * 6000000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
       updateIDs,
       clientOrderIDs,

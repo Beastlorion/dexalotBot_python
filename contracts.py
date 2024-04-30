@@ -244,13 +244,14 @@ def dexalotOrderFeed():
                   order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
                   order['price'] = float(data['price'])
                   order['side'] = int(data['sideId'])
-          elif data['status'] in ['FILLED','EXPIRED','KILLED','CANCELLED']:
+                  order['status'] = data['status']
+          elif data['status'] in ['FILLED','EXPIRED','KILLED']:
             refreshBalances = True
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 print('Order',data['status'],'and removed from activeOrders:',parsed)
                 activeOrders.remove(order)
-          elif (data['status'] in ['NEW','REJECTED']):
+          elif (data['status'] in ['NEW','REJECTED','CANCEL_REJECT']):
             for tx in pendingTransactions:
               if tx['purpose'] in ['addOrderList','replaceOrderList'] :
                 for order in tx['orders']:
@@ -262,15 +263,19 @@ def dexalotOrderFeed():
                     order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
                     order['price'] = float(data['price'])
                     order['side'] = int(data['sideId'])
+                    order['status'] = data['status']
                     if tx['purpose'] in ['replaceOrderList']:
                       for oldOrder in activeOrders:
                         if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
                           activeOrders.remove(oldOrder)
                     activeOrders.append(order)
                     order['tracked'] = True
-                  elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'REJECTED':
-                    print("REJECTED ORDER:",clientOrderID)
+                  elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['REJECTED','CANCEL_REJECT']:
+                    print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
                     order['tracked'] = True
+                    for oldOrder in activeOrders:
+                      if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                        activeOrders.remove(oldOrder)
                 tracked = 0
                 for order in tx['orders']:
                   if order['tracked']:
@@ -282,6 +287,10 @@ def dexalotOrderFeed():
                     addStatus = 1
                   elif (tx['purpose'] == 'replaceOrderList'):
                     replaceStatus = 1
+          elif data['status'] == 'CANCELED':
+            for order in activeOrders:
+              if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                order['status'] = data['status']
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
     msg = {"type":"tradereventsubscribe", "signature":signature}

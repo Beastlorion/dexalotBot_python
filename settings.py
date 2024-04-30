@@ -3,11 +3,11 @@ settings = {
     "secret_name": '', 
     "secret_location": '', 
     "useCancelReplace": True, 
-    "useVolSpread": True, 
+    "useVolSpread": False, 
     "useCustomPrice": False,
     "refreshTolerance":0.05,
     "defensiveSkew":0.01,
-    "levels":[{"level":1,"spread":0.05,"qty":1,"refreshTolerance":0.05},
+    "levels":[{"level":1,"spread":0.05,"qty":1,"refreshTolerance":-0.05},
               {"level":2,"spread":2,"qty":2,"refreshTolerance":0.25}]
     },
   'AVAX_USDT':{

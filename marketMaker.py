@@ -75,7 +75,7 @@ async def orderUpdater():
         await asyncio.sleep(0.2)
         continue
       elif time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
-        await orders.cancelAllOrders(pairStr)
+        await orders.getOpenOrders(pairStr,True)
         await asyncio.sleep(4)
         contracts.pendingTransactions = []
         contracts.activeOrders = []
@@ -84,6 +84,9 @@ async def orderUpdater():
         print("\n")
         print("New market price:", marketPrice, time.time())
       if (settings['useCancelReplace']):
+        for order in contracts.activeOrders:
+          if order['status'] == 'CANCELED':
+            contracts.activeOrders.remove(order)
         success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate)
         if success:
           lastUpdateTime = time.time()
