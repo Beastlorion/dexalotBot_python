@@ -273,9 +273,10 @@ def dexalotOrderFeed():
                   elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['REJECTED','CANCEL_REJECT']:
                     print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
                     order['tracked'] = True
-                    for oldOrder in activeOrders:
-                      if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
-                        activeOrders.remove(oldOrder)
+                    if tx['purpose'] in ['replaceOrderList']:
+                      for oldOrder in activeOrders:
+                        if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                          activeOrders.remove(oldOrder)
                 tracked = 0
                 for order in tx['orders']:
                   if order['tracked']:
