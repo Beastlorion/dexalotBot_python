@@ -293,7 +293,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
   sortedOrders = sorted(orders, key = lambda d: d['costDif'])
-  print('replace orders:',time.time(), 'orders:', sortedOrders)
+  # print('replace orders:',time.time(), 'orders:', sortedOrders)
   
   updateIDs = []
   clientOrderIDs = []
@@ -306,7 +306,7 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
     prices.append(Web3.to_wei(order["price"], shiftPrice))
     quantities.append(Web3.to_wei(order["qty"], shiftQty))
   
-  print('Prices:', prices, 'quantities',quantities)
+  print('replaceOrderList - Prices:', prices, 'quantities',quantities)
   try:
     contracts.newPendingTx('replaceOrderList',sortedOrders)
     gas = len(sortedOrders) * 1000000
@@ -341,8 +341,8 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQt
     clientOrderIDs.append(order['clientOrderID'])
     type2s.append(3)
 
-  print('Prices:', prices, 'quantities',quantities)
-  print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
+  print('addLimitOrderList - Prices:', prices, 'quantities',quantities)
+  # print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
     gas = len(limit_orders) * 700000
