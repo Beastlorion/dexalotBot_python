@@ -29,13 +29,7 @@ async def getPairObj(pair, apiUrl):
       return item
 
 def getIncrement(quoteDisplayDecimals):
-  increment = '0.'
-  for i in range(quoteDisplayDecimals):
-    if i < quoteDisplayDecimals - 1:
-      increment += '0'
-    else:
-      increment += '1'
-  return float(increment);
+  return float(1 * pow(10,-1 * quoteDisplayDecimals));
     
 def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0

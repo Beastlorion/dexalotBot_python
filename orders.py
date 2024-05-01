@@ -1,5 +1,8 @@
 import sys, os, asyncio, time, ast, json, shortuuid
+from decimal import Decimal
+from eth_utils.units import units, decimal
 import contracts, tools
+from web3 import Web3
 from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
@@ -9,7 +12,11 @@ config = {
     **dotenv_values(".env.shared"),
     **dotenv_values(".env.secret")
 }
-
+units.update(
+    {
+        "8_dec": decimal.Decimal("100000000"),  # Add in 8 decimals
+    }
+)
 openOrders = None
 
 failedReplaceAttempts = 0
@@ -145,7 +152,7 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
         price = round(marketPrice * (1 - spread),pairObj["quotedisplaydecimals"])
         if price > contracts.bestAsk:
-          price = contracts.bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"])
+          price = round(contracts.bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
         qty = round(tools.getQty(price,0,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -158,21 +165,24 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
   return orders
 
 def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds):
-  orders = []
-  availableFunds = availBaseFunds
-  for level in settings["levels"]:
-    if int(level['level']) <= levelsToUpdate:
-      spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
-      price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
-      if price < contracts.bestBid:
-        price = contracts.bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"])
-      qty = round(tools.getQty(price,1,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
-      if qty * marketPrice < float(pairObj["mintrade_amnt"]):
-        continue
-      if qty > float(pairObj["maxtrade_amnt"]) :
-        qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
-      availableFunds = availableFunds - qty
-      orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
+  try:
+    orders = []
+    availableFunds = availBaseFunds
+    for level in settings["levels"]:
+      if int(level['level']) <= levelsToUpdate:
+        spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
+        price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
+        if price < contracts.bestBid:
+          price = round(contracts.bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+        qty = round(tools.getQty(price,1,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
+        if qty * marketPrice < float(pairObj["mintrade_amnt"]):
+          continue
+        if qty > float(pairObj["maxtrade_amnt"]) :
+          qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
+        availableFunds = availableFunds - qty
+        orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
+  except Exception as error:
+    print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate):
@@ -246,15 +256,30 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     print("ORDERS TO CANCEL:", orderIDsToCancel)
     await cancelOrderList(orderIDsToCancel)
   
+  quoteDecimals = pairObj["quote_evmdecimals"]
+  shiftPrice = 'ether'
+  match quoteDecimals:
+    case 6:
+      shiftPrice = "lovelace"
+    case 8:
+      shiftPrice = "8_dec"
+  baseDecimals = pairObj["base_evmdecimals"]
+  shiftQty = 'ether'
+  match baseDecimals:
+    case 6:
+      shiftQty = "lovelace"
+    case 8:
+      shiftQty = "8_dec"
+        
   replaceTx = False
   if len(replaceOrders) > 0:
     replaceTx = True
-    asyncio.create_task(replaceOrderList(replaceOrders, pairObj))
+    asyncio.create_task(replaceOrderList(replaceOrders, pairObj,shiftPrice,shiftQty))
   
   addTx = False
   if len(newOrders) > 0:
     addTx = True
-    asyncio.create_task(addLimitOrderList(newOrders,pairObj,pairByte32))
+    asyncio.create_task(addLimitOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty))
   
   if replaceTx or addTx:
     for x in range(100):
@@ -266,7 +291,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     return False
   return True
 
-async def replaceOrderList(orders, pairObj):
+async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
   sortedOrders = sorted(orders, key = lambda d: d['costDif'])
   print('replace orders:',time.time(), 'orders:', sortedOrders)
   
@@ -278,9 +303,10 @@ async def replaceOrderList(orders, pairObj):
   for order in sortedOrders:
     updateIDs.append(order['orderID'])
     clientOrderIDs.append(order['clientOrderID'])
-    prices.append(int(order["price"]*pow(10, int(pairObj["quote_evmdecimals"]))))
-    quantities.append(int(order["qty"]*pow(10, int(pairObj["base_evmdecimals"]))))
+    prices.append(Web3.to_wei(order["price"], shiftPrice))
+    quantities.append(Web3.to_wei(order["qty"], shiftQty))
   
+  print('Prices:', prices, 'quantities',quantities)
   try:
     contracts.newPendingTx('replaceOrderList',sortedOrders)
     gas = len(sortedOrders) * 1000000
@@ -300,20 +326,22 @@ async def replaceOrderList(orders, pairObj):
         contracts.pendingTransactions.remove(tx)
   return
 
-async def addLimitOrderList(limit_orders,pairObj,pairByte32):
+async def addLimitOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty):
   prices = []
   quantities = []
   sides = []
   clientOrderIDs = []
   type2s = []
-  
+        
   for order in limit_orders:
-    prices.append(int(order["price"]*pow(10, int(pairObj["quote_evmdecimals"]))))
-    quantities.append(int(order["qty"]*pow(10, int(pairObj["base_evmdecimals"]))))
+    
+    prices.append(Web3.to_wei(order["price"], shiftPrice))
+    quantities.append(Web3.to_wei(order["qty"], shiftQty))
     sides.append(order["side"])
     clientOrderIDs.append(order['clientOrderID'])
     type2s.append(3)
 
+  print('Prices:', prices, 'quantities',quantities)
   print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
