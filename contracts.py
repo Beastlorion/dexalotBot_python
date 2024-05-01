@@ -36,6 +36,8 @@ nonce = 0
 status = True
 pendingTransactions = []
 activeOrders = []
+makerRate = None
+takerRate = None
 bestBid = None
 bestAsk = None
 replaceStatus = 0
@@ -143,6 +145,7 @@ async def initializeContracts(market,pairStr):
   
   contracts["PortfolioMain"]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
   contracts["PortfolioSub"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSub"]["address"], abi=contracts["PortfolioSub"]["abi"]["abi"])
+  contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSubHelper"]["address"], abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
   contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["TradePairs"]["address"], abi=contracts["TradePairs"]["abi"]["abi"])
   contracts["OrderBooks"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["OrderBooks"]["address"], abi=contracts["OrderBooks"]["abi"]["abi"])
   contracts["OrderBooks"]["id0"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairStr.encode('utf-8'), 0).call()
@@ -180,6 +183,14 @@ def incrementNonce():
   global nonce
   nonce = nonce + 1
   
+def getRates(pairObj,pairByte32):
+  global makerRate, takerRate
+  rates = contracts['PortfolioSubHelper']["deployedContract"].functions.getRates(address,address,pairByte32,int(pairObj['maker_rate_bps']),int(pairObj['taker_rate_bps'])).call()
+  makerRate = rates[0]
+  takerRate = rates[1]
+  print('Maker Rate BP:',makerRate)
+  print('Taker Rate BP:',takerRate)
+  
 async def startDataFeeds(pairObj):
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # a = asyncio.create_task(log_loop(block_filter, 0.5))
@@ -210,9 +221,12 @@ def dexalotBookFeed(pairObj):
           data = parsed['data']
           bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
-          # print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
+          print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
+      except KeyboardInterrupt:
+        print("KeyboardInterrupt")
       except Exception as error:
         print("error in dexalotBookFeed feed:", error)
+        continue
     msg = {"data":pairStr,"pair":pairStr,"type":"unsubscribe","decimal":3}
     websocket.send(json.dumps(msg))
     return
@@ -292,9 +306,12 @@ def dexalotOrderFeed():
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 order['status'] = data['status']
+      except KeyboardInterrupt:
+        print("KeyboardInterrupt")
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
-    msg = {"type":"tradereventsubscribe", "signature":signature}
+        continue
+    msg = {"type":"tradereventunsubscribe", "signature":signature}
     websocket.send(json.dumps(msg))
     return
         

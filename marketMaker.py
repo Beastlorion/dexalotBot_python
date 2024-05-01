@@ -30,13 +30,14 @@ async def start():
   
   async with aiohttp.ClientSession() as s:
     tasks = []
-    tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s)]
+    tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s),contracts.getDeployments("PortfolioSubHelper",s)]
     res = await asyncio.gather(*tasks)
   await aiohttp.ClientSession().close()
     
     
   await contracts.initializeProviders(market,settings)
   await contracts.initializeContracts(market,pairStr)
+  contracts.getRates(pairObj,pairByte32)
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
   await asyncio.sleep(4)
@@ -45,7 +46,7 @@ async def start():
   orders.getBestOrders()
   await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater())
   contracts.status = False
-  asyncio.sleep(2)
+  await asyncio.sleep(2)
 
 async def orderUpdater():
   levels = []
@@ -70,7 +71,8 @@ async def orderUpdater():
     for level in levels:
       if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
-    if levelsToUpdate > 0:
+    taker = settings['takerEnabled'] and (marketPrice > contracts.bestAsk + (contracts.bestAsk * settings['takerThreshold']/100) or marketPrice < contracts.bestBid - (contracts.bestBid * settings['takerThreshold']/100))
+    if levelsToUpdate > 0 or taker:
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
         print('waiting on pending transactions')
         await asyncio.sleep(0.2)
@@ -89,7 +91,7 @@ async def orderUpdater():
         for order in contracts.activeOrders:
           if order['status'] == 'CANCELED':
             contracts.activeOrders.remove(order)
-        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate)
+        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker)
         if success:
           lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice

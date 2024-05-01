@@ -185,7 +185,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate):
+async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker):
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
