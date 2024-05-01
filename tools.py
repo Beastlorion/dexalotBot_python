@@ -39,7 +39,7 @@ def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   if (funds > totalFunds/2):
     multiple = ((funds/totalFunds) - .5) * 20
     defensiveSkew = multiple * settings["defensiveSkew"];
-  spread = defensiveSkew/100 + level["spread"]/100 + volSpread
+  spread = defensiveSkew/100 + level["spread"]/100 + volSpread/2
   return spread
 
 def getQty(price, side, level, availableFunds,pairObj):

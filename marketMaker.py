@@ -79,7 +79,6 @@ async def orderUpdater():
         await orders.getOpenOrders(pairStr,True)
         await asyncio.sleep(4)
         contracts.pendingTransactions = []
-        contracts.activeOrders = []
         continue
       else:
         print("\n")
