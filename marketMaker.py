@@ -70,8 +70,9 @@ async def orderUpdater():
     for level in levels:
       if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
-  
-    taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
+    taker = False
+    if(settings['takerEnabled']):
+      taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or taker:
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
         print('waiting on pending transactions')
