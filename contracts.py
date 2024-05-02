@@ -1,6 +1,6 @@
 import sys, os, asyncio, time, ast, json
 from hexbytes import HexBytes
-from websockets.sync.client import connect
+import websockets
 import tools
 from dotenv import dotenv_values
 import urllib.request
@@ -194,8 +194,8 @@ def getRates(pairObj,pairByte32):
 async def startDataFeeds(pairObj):
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # a = asyncio.create_task(log_loop(block_filter, 0.5))
-  b = asyncio.to_thread(dexalotOrderFeed)
-  c = asyncio.to_thread(dexalotBookFeed,pairObj)
+  b = asyncio.create_task(dexalotOrderFeed())
+  c = asyncio.create_task(dexalotBookFeed(pairObj))
   d = asyncio.create_task(updateBalancesLoop(pairObj))
   await asyncio.gather(b,c,d)
   
@@ -207,40 +207,37 @@ async def updateBalancesLoop(pairObj):
   return
     
   
-def dexalotBookFeed(pairObj):
+async def dexalotBookFeed(pairObj):
   global bestAsk,bestBid
   print("dexalotBookFeed START")
   msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":3}
-  with connect("wss://api.dexalot.com") as websocket:
-    websocket.send(json.dumps(msg))
+  async with websockets.connect("wss://api.dexalot.com") as websocket:
+    await websocket.send(json.dumps(msg))
     while status:
       try:
-        message = str(websocket.recv())
+        message = str(await websocket.recv())
         parsed = ast.literal_eval(message)
         if parsed['type'] == 'orderBooks':
           data = parsed['data']
           bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
-      except KeyboardInterrupt:
-        print("KeyboardInterrupt")
       except Exception as error:
         print("error in dexalotBookFeed feed:", error)
         continue
     msg = {"data":pairStr,"pair":pairStr,"type":"unsubscribe","decimal":3}
     websocket.send(json.dumps(msg))
     return
-        
-      
-def dexalotOrderFeed():
+
+async def dexalotOrderFeed():
   global addStatus, replaceStatus, refreshBalances
   print("dexalotOrderFeed START")
   msg = {"type":"tradereventsubscribe", "signature":signature}
-  with connect("wss://api.dexalot.com") as websocket:
-    websocket.send(json.dumps(msg))
+  async with websockets.connect("wss://api.dexalot.com") as websocket:
+    await websocket.send(json.dumps(msg))
     while status:
       try:
-        message = str(websocket.recv())
+        message = str(await websocket.recv())
         parsed = ast.literal_eval(message)
         data = parsed['data']
         if parsed['type'] == "orderStatusUpdateEvent":
@@ -306,8 +303,6 @@ def dexalotOrderFeed():
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 order['status'] = data['status']
-      except KeyboardInterrupt:
-        print("KeyboardInterrupt")
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
         continue
