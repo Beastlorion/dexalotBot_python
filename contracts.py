@@ -43,6 +43,10 @@ bestAsk = None
 replaceStatus = 0
 addStatus = 0
 refreshBalances = False
+bids = []
+asks = []
+baseShift = 'ether'
+quoteShift = 'ether'
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -208,26 +212,45 @@ async def updateBalancesLoop(pairObj):
     
   
 async def dexalotBookFeed(pairObj):
-  global bestAsk,bestBid
+  global bestAsk, bestBid, bids, asks
   print("dexalotBookFeed START")
+  base = pairObj['pair'].split('/')[0]
+  quote = pairObj['pair'].split('/')[1]
+  baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
+  quoteDecimals = contracts[quote]["tokenDetails"]["evmdecimals"]
   msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
   async with websockets.connect("wss://api.dexalot.com") as websocket:
     await websocket.send(json.dumps(msg))
     while status:
       try:
         message = str(await websocket.recv())
-        parsed = ast.literal_eval(message)
+        parsed = json.loads(message)
         if parsed['type'] == 'orderBooks':
           data = parsed['data']
-          bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
-          bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
+          print(bestBid,bestAsk)
+          bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
+          bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
+          print(bestBid,bestAsk)
+          bidPrices = data['buyBook'][0]['prices'].split(',')
+          bidQtys = data['buyBook'][0]['quantities'].split(',')
+          askPrices = data['sellBook'][0]['prices'].split(',')
+          askQtys = data['sellBook'][0]['quantities'].split(',')
+          buildBids = []
+          buildAsks = []
+          
+          for i,price in enumerate(bidPrices):
+            buildBids.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(bidQtys[i]), baseShift)),baseDecimals)])
+          for i,price in enumerate(askPrices):
+            buildAsks.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(askQtys[i]), baseShift)),baseDecimals)])
+          bids = buildBids
+          asks = buildAsks
       except websockets.ConnectionClosed:
-        websocket.send(json.dumps(msg))
+        await websocket.send(json.dumps(msg))
       except Exception as error:
         print("error in dexalotBookFeed feed:", error)
         continue
     msg = {"data":pairStr,"pair":pairStr,"type":"unsubscribe","decimal":3}
-    websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msg))
     return
 
 async def dexalotOrderFeed():
@@ -239,7 +262,7 @@ async def dexalotOrderFeed():
     while status:
       try:
         message = str(await websocket.recv())
-        parsed = ast.literal_eval(message)
+        parsed = json.loads(message)
         data = parsed['data']
         if parsed['type'] == "orderStatusUpdateEvent":
           hex1 = HexBytes(data["clientOrderId"])
@@ -305,12 +328,12 @@ async def dexalotOrderFeed():
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 order['status'] = data['status']
       except websockets.ConnectionClosed:
-        websocket.send(json.dumps(msg))
+        await websocket.send(json.dumps(msg))
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
         continue
     msg = {"type":"tradereventunsubscribe", "signature":signature}
-    websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msg))
     return
         
 async def log_loop(event_filter, poll_interval):
@@ -388,7 +411,7 @@ def newPendingTx(purpose,orders = []):
 
 def getBalances(base, quote):
   print("get balances",time.time())
-  global refreshBalances
+  global refreshBalances, baseShift, quoteShift
   portfolio = contracts["PortfolioSub"]["deployedContract"]
   
   try:
@@ -413,34 +436,34 @@ def getBalances(base, quote):
     
     if base != "ALOT" and base != "AVAX":
       decimals = contracts[base]["tokenDetails"]["evmdecimals"]
-      shift = 'ether'
+      baseShift = 'ether'
       match decimals:
         case 6:
-          shift = "lovelace"
+          baseShift = "lovelace"
         case 8:
-          shift = "8_dec"
+          baseShift = "8_dec"
       basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
-      contracts[base]["mainnetBal"] = Web3.from_wei(basec, shift)
+      contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
       
       baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
-      contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], shift)
-      contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], shift)
+      contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
+      contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
       # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
       decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
-      shift = 'ether'
+      quoteShift = 'ether'
       match decimals:
         case 6:
-          shift = "lovelace"
+          quoteShift = "lovelace"
         case 8:
-          shift = "8_dec"
+          quoteShift = "8_dec"
       quoteC = contracts[quote]["deployedContract"].functions.balanceOf(address).call()
-      contracts[quote]["mainnetBal"] = Web3.from_wei(quoteC, shift)
+      contracts[quote]["mainnetBal"] = Web3.from_wei(quoteC, quoteShift)
       
       quoteD = portfolio.functions.getBalance(address, quote.encode('utf-8')).call()
-      contracts[quote]["portfolioTot"] = Web3.from_wei(quoteD[0], shift)
-      contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], shift)
+      contracts[quote]["portfolioTot"] = Web3.from_wei(quoteD[0], quoteShift)
+      contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], quoteShift)
       # print("BALANCES:",quote,contracts[quote]["mainnetBal"], contracts[quote]["portfolioTot"], contracts[quote]["portfolioAvail"])
   except Exception as error:
     print("error in getBalances:", error)

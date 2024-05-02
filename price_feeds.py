@@ -1,6 +1,7 @@
 import time, ast, asyncio, aiohttp, json
 import urllib.request
 from binance import AsyncClient, BinanceSocketManager
+from pybit.unified_trading import WebSocket
 import tools
 import contracts
 
@@ -10,6 +11,8 @@ usdt = 0
 usdcUsdt = 0
 marketPrice = 0
 volSpread = 0
+bybitBids = []
+bybitAsks = []
 
 async def startPriceFeed(market,settings):
   base = tools.getSymbolFromName(market,0)
@@ -30,6 +33,8 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
+    if (settings['takerEnabled']):
+      asyncio.create_task(bybitFeed(base, quote))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
@@ -113,6 +118,7 @@ async def getCustomPrice(base,quote):
       except Exception as error:
         print("error in getCustomPrice:", error)
       await asyncio.sleep(0.1)
+      
 async def getVolSpread(base,quote):
   global volSpread
   async with aiohttp.ClientSession() as s:
@@ -128,3 +134,28 @@ async def getVolSpread(base,quote):
       except Exception as error:
         print("error in getVolSpread:", error)
       await asyncio.sleep(1)
+      
+async def bybitFeed (base,quote):
+  ws = WebSocket(
+    testnet=False,
+    channel_type="spot",
+  )
+  if quote == "USDC":
+    quote = "USDT"
+    
+  def handle_orderbook(message):
+    global bybitBids,bybitAsks
+    if message['topic'] == "orderbook.50."+base+quote:
+      if time.time() - message['ts'] < 5:
+        buildBids = []
+        buildAsks = []
+        for bid in message['data']['b']:
+          buildBids.append([float(bid[0]),float(bid[1])])
+        for ask in message['data']['a']:
+          buildAsks.append([float(ask[0]),float(ask[1])])
+        bybitBids = buildBids
+        bybitAsks = buildAsks
+        
+  await asyncio.to_thread(ws.orderbook_stream,50, base+quote, handle_orderbook)
+  
+  

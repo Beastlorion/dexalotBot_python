@@ -88,3 +88,32 @@ def getPrivateKey(market,settings):
   if pk[:2] != '0x':
     pk = '0x' + pk
   return pk
+
+def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side):
+  qtyFilled = 0
+  qtyAvailable = 0
+  if side == 0:
+    for order in book:
+      if order[0] < executePrice:
+        qtyFilled = qtyFilled + order[1]
+      else:
+        break
+    for order in bybitBook:
+      if order[0] > marketPrice * (1 - settings['maxSlippage']):
+        qtyAvailable = qtyAvailable + order[1]
+      else:
+        break
+  if side == 1:
+    for order in book:
+      if order[0] > executePrice:
+        qtyFilled = qtyFilled + order[1]
+      else:
+        break
+    for order in bybitBook:
+      if order[0] < marketPrice * (1 + settings['maxSlippage']):
+        qtyAvailable = qtyAvailable + order[1]
+      else:
+        break
+  if qtyFilled > qtyAvailable:
+    qtyFilled = qtyAvailable
+  return qtyFilled

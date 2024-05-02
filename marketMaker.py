@@ -1,5 +1,5 @@
 import sys, os, asyncio, time, ast, aiohttp
-import settings, tools, contracts, orders
+import settings, tools, contracts, orders, price_feeds
 from dotenv import dotenv_values
 from decimal import *
 from hexbytes import HexBytes
@@ -26,7 +26,6 @@ async def start():
   if (pairObj is None):
     print("failed to get pairObj")
     return
-  
   
   async with aiohttp.ClientSession() as s:
     tasks = []
@@ -71,7 +70,8 @@ async def orderUpdater():
     for level in levels:
       if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
-    taker = settings['takerEnabled'] and (marketPrice > contracts.bestAsk + (contracts.bestAsk * settings['takerThreshold']/100) or marketPrice < contracts.bestBid - (contracts.bestBid * settings['takerThreshold']/100))
+  
+    taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or taker:
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
         print('waiting on pending transactions')

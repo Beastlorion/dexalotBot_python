@@ -18,6 +18,7 @@ units.update(
     }
 )
 openOrders = None
+totalQtyFilled = 0
 
 failedReplaceAttempts = 0
 
@@ -128,9 +129,11 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
-  for i in range(5):
+  for i in range(3):
     openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
+      break
+    elif(len(openOrders["rows"]) == len(contracts.activeOrders)):
       break
     else:
       await asyncio.sleep(1)
@@ -186,10 +189,24 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
   return orders
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker):
+  global totalQtyFilled
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
   orderIDsToCancel = []
+  
+  if taker:
+    qtyFilled = 0
+    if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
+      executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100)
+      qtyFilled = getTakerFill(settings,executePrice,contracts.asks,price_feeds.bids,0)
+      print("BUY FILL:", qtyFilled)
+    elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid:
+      executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100)
+      qtyFilled = getTakerFill(settings,executePrice,contracts.bids,price_feeds.asks,1)
+      print("SELL FILL:", qtyFilled)
+
+    totalQtyFilled = totalQtyFilled + qtyFilled
   
   contracts.replaceStatus = 0
   contracts.addStatus = 0
