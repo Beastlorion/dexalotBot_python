@@ -60,7 +60,7 @@ async def startTicker(client, bm, base, quote):
       res = await tscm.recv()
       priceUsdt = float(res["p"])
       if quote == "USDC" and usdcUsdt:
-        marketPrice = priceUsdt * usdcUsdt
+        marketPrice = priceUsdt / usdcUsdt
       elif (quote == "USDT"):
         marketPrice = priceUsdt
   await client.close_connection()
@@ -140,21 +140,32 @@ async def bybitFeed (base,quote):
     testnet=False,
     channel_type="spot",
   )
+  convert = False
   if quote == "USDC":
     quote = "USDT"
+    convert = True
     
   def handle_orderbook(message):
     global bybitBids,bybitAsks
-    if message['topic'] == "orderbook.50."+base+quote:
-      if time.time() - message['ts'] < 5:
-        buildBids = []
-        buildAsks = []
-        for bid in message['data']['b']:
-          buildBids.append([float(bid[0]),float(bid[1])])
-        for ask in message['data']['a']:
-          buildAsks.append([float(ask[0]),float(ask[1])])
-        bybitBids = buildBids
-        bybitAsks = buildAsks
+    try:
+      if message['topic'] == "orderbook.50."+base+quote:
+        if time.time() - message['ts'] < 5:
+          buildBids = []
+          buildAsks = []
+          if convert and usdcUsdt != 0:
+            for bid in message['data']['b']:
+              buildBids.append([float(bid[0])/usdcUsdt,float(bid[1])])
+            for ask in message['data']['a']:
+              buildAsks.append([float(ask[0])/usdcUsdt,float(ask[1])])
+          else:
+            for bid in message['data']['b']:
+              buildBids.append([float(bid[0]),float(bid[1])])
+            for ask in message['data']['a']:
+              buildAsks.append([float(ask[0]),float(ask[1])])
+          bybitBids = sorted(buildBids, key=lambda tup: tup[0], reverse=True)
+          bybitAsks = sorted(buildAsks, key=lambda tup: tup[0])
+    except Exception as error:
+      print('error in handle_orderbook bybit:',error)
         
   await asyncio.to_thread(ws.orderbook_stream,50, base+quote, handle_orderbook)
   

@@ -116,4 +116,5 @@ def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side):
         break
   if qtyFilled > qtyAvailable:
     qtyFilled = qtyAvailable
+  print(qtyFilled,qtyAvailable)
   return qtyFilled

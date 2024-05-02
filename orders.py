@@ -1,7 +1,7 @@
 import sys, os, asyncio, time, ast, json, shortuuid
 from decimal import Decimal
 from eth_utils.units import units, decimal
-import contracts, tools
+import contracts, tools, price_feeds
 from web3 import Web3
 from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values
@@ -19,6 +19,8 @@ units.update(
 )
 openOrders = None
 totalQtyFilled = 0
+totalQtyFilled2 = 0
+totalQtyFilled3 = 0
 
 failedReplaceAttempts = 0
 
@@ -129,6 +131,8 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
+  if shuttingDown:
+    await asyncio.sleep(4)
   for i in range(3):
     openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
@@ -189,24 +193,44 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
   return orders
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker):
-  global totalQtyFilled
+  global totalQtyFilled,totalQtyFilled2,totalQtyFilled3
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
   orderIDsToCancel = []
   
   if taker:
+    print("try taker")
     qtyFilled = 0
     if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
       executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100)
-      qtyFilled = getTakerFill(settings,executePrice,contracts.asks,price_feeds.bids,0)
-      print("BUY FILL:", qtyFilled)
+      qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
     elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid:
       executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100)
-      qtyFilled = getTakerFill(settings,executePrice,contracts.bids,price_feeds.asks,1)
-      print("SELL FILL:", qtyFilled)
-
+      qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
     totalQtyFilled = totalQtyFilled + qtyFilled
+    
+    QtyFilled2 = 0
+    if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100) > contracts.bestAsk:
+      executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100)
+      QtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
+    elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100) < contracts.bestBid:
+      executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100)
+      QtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
+    totalQtyFilled2 = totalQtyFilled2 + qtyFilled2
+    
+    QtyFilled3 = 0
+    if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100) > contracts.bestAsk:
+      executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100)
+      QtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
+    elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100) < contracts.bestBid:
+      executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100)
+      QtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
+    totalQtyFilled3 = totalQtyFilled3 + qtyFilled3
+  
+  print('totalQtyFilled',totalQtyFilled)
+  print('totalQtyFilled2',totalQtyFilled2)
+  print('totalQtyFilled3',totalQtyFilled3)
   
   contracts.replaceStatus = 0
   contracts.addStatus = 0

@@ -227,10 +227,9 @@ async def dexalotBookFeed(pairObj):
         parsed = json.loads(message)
         if parsed['type'] == 'orderBooks':
           data = parsed['data']
-          print(bestBid,bestAsk)
           bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
           bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
-          print(bestBid,bestAsk)
+          # print(bestBid,bestAsk)
           bidPrices = data['buyBook'][0]['prices'].split(',')
           bidQtys = data['buyBook'][0]['quantities'].split(',')
           askPrices = data['sellBook'][0]['prices'].split(',')
