@@ -222,6 +222,8 @@ async def dexalotBookFeed(pairObj):
           bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
+      except websockets.ConnectionClosed:
+        websocket.send(json.dumps(msg))
       except Exception as error:
         print("error in dexalotBookFeed feed:", error)
         continue
@@ -303,6 +305,8 @@ async def dexalotOrderFeed():
             for order in activeOrders:
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 order['status'] = data['status']
+      except websockets.ConnectionClosed:
+        websocket.send(json.dumps(msg))
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
         continue
