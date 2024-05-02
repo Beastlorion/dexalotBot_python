@@ -85,6 +85,7 @@ async def orderUpdater():
       else:
         print("\n")
         print("New market price:", marketPrice, time.time())
+        print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
       if (settings['useCancelReplace']):
         count = count+1
         print('Replace orders count:',count, 'time:',time.time())

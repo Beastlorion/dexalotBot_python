@@ -210,7 +210,7 @@ async def updateBalancesLoop(pairObj):
 async def dexalotBookFeed(pairObj):
   global bestAsk,bestBid
   print("dexalotBookFeed START")
-  msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":3}
+  msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
   async with websockets.connect("wss://api.dexalot.com") as websocket:
     await websocket.send(json.dumps(msg))
     while status:
@@ -221,7 +221,6 @@ async def dexalotBookFeed(pairObj):
           data = parsed['data']
           bestBid = float(data['buyBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
           bestAsk = float(data['sellBook'][0]['prices'].split(',')[0])/pow(10,pairObj['quote_evmdecimals'])
-          print('BEST BID:', bestBid, "BEST ASK:",bestAsk)
       except websockets.ConnectionClosed:
         websocket.send(json.dumps(msg))
       except Exception as error:
