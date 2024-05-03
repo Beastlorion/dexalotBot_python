@@ -72,7 +72,6 @@ async def orderUpdater():
         levelsToUpdate = int(level['level'])
     taker = False
     if(settings['takerEnabled']):
-      print('a',round(price_feeds.bybitBids[0][0],4), round(price_feeds.bybitAsks[0][0],4) )
       taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or taker:
       if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
@@ -85,7 +84,7 @@ async def orderUpdater():
         contracts.pendingTransactions = []
         continue
       else:
-        print("New market price:", marketPrice, time.time())
+        print("New market price:", marketPrice, "volatility spread:",price_feeds.volSpread, time.time())
         print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
       if (settings['useCancelReplace']):
         count = count+1
