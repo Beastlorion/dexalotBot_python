@@ -166,12 +166,13 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
         myBestAsk = True
         # bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
+      retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
         price = round(marketPrice * (1 - spread),pairObj["quotedisplaydecimals"])
         if price > contracts.bestAsk:
           price = round(contracts.bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
-          contracts.retrigger = True
+          retrigger = True
         qty = round(tools.getQty(price,0,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -179,6 +180,8 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
           qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
         availableFunds = availableFunds - (qty * price)
         orders.append({'side':0,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
+        if retrigger:
+          contracts.retrigger = True
   except Exception as error:
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
@@ -194,12 +197,13 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         myBestAsk = True
         # bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
+      retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
         price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
         if price < bestBid:
           price = round(bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
-          contracts.retrigger = True
+          retrigger = True
         qty = round(tools.getQty(price,1,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -207,6 +211,8 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
           qty = round(float(pairObj["maxtrade_amnt"]) * 0.999,pairObj["basedisplaydecimals"])
         availableFunds = availableFunds - qty
         orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
+        if retrigger:
+          contracts.retrigger = True
   except Exception as error:
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
