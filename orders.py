@@ -358,6 +358,8 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         return False
       await asyncio.sleep(0.05)
     return False
+  else:
+    await asyncio.sleep(1)
   return True
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
