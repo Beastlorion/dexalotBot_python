@@ -211,7 +211,9 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   newOrders = []
   ordersToUpdate = []
   orderIDsToCancel = []
-  
+  contracts.replaceStatus = 0
+  contracts.addStatus = 0
+  contracts.retrigger = False
   if taker:
     print("try taker")
     qtyFilled = 0
@@ -251,9 +253,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   print('totalQtyFilled2',totalQtyFilled2)
   print('totalQtyFilled3',totalQtyFilled3)
   
-  contracts.replaceStatus = 0
-  contracts.addStatus = 0
-  
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
@@ -288,8 +287,12 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   
   for newOrder in limit_orders:
     matches = []
+    skip = False
     for oldOrder in ordersToUpdate:
       if newOrder['side'] == oldOrder['side'] and newOrder['level'] == oldOrder['level']:
+        if newOrder['price'] == oldOrder['price'] and newOrder['qty'] == oldOrder['qty']:
+          skip = True
+          break
         newOrder['orderID'] = oldOrder['orderID']
         newOrder['oldClientOrderID'] = oldOrder['clientOrderID']
         if newOrder['side'] == 0:
@@ -297,7 +300,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         else:
           newOrder['costDif'] = newOrder['qty'] - oldOrder['qtyLeft']
         matches.append(newOrder)
-    if len(matches) == 0:
+    if len(matches) == 0 and not skip:
       newOrders.append(newOrder)
     elif len(matches) == 1:
       replaceOrders = replaceOrders + matches

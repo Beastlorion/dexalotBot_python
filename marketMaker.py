@@ -68,7 +68,7 @@ async def orderUpdater():
       continue
     levelsToUpdate = 0
     for level in levels:
-      if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
+      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
         levelsToUpdate = int(level['level'])
     taker = False
     if(settings['takerEnabled']):

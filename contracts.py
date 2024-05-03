@@ -47,6 +47,7 @@ bids = []
 asks = []
 baseShift = 'ether'
 quoteShift = 'ether'
+retrigger = False
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -253,7 +254,7 @@ async def dexalotBookFeed(pairObj):
     return
 
 async def dexalotOrderFeed():
-  global addStatus, replaceStatus, refreshBalances
+  global addStatus, replaceStatus, refreshBalances, retrigger
   print("dexalotOrderFeed START")
   msg = {"type":"tradereventsubscribe", "signature":signature}
   async with websockets.connect("wss://api.dexalot.com") as websocket:
@@ -306,6 +307,8 @@ async def dexalotOrderFeed():
                     order['tracked'] = True
                   elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['REJECTED','CANCEL_REJECT']:
                     print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
+                    if data['code'] == "T-T2PO-01":
+                      retrigger = True
                     order['tracked'] = True
                     if tx['purpose'] in ['replaceOrderList']:
                       for oldOrder in activeOrders:
