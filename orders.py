@@ -359,6 +359,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       await asyncio.sleep(0.05)
     return False
   else:
+    contracts.retrigger = False
     await asyncio.sleep(1)
   return True
 
