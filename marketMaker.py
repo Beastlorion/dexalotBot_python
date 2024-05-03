@@ -92,7 +92,7 @@ async def orderUpdater():
         for order in contracts.activeOrders:
           if order['status'] == 'CANCELED':
             contracts.activeOrders.remove(order)
-        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker)
+        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice)
         if success:
           lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice

@@ -149,6 +149,8 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
     for order in openOrders["rows"]:
       orderIDs.append(order["id"])
     await cancelOrderList(orderIDs)
+    if shuttingDown:
+      await asyncio.sleep(2)
     contracts.activeOrders = []
   else:
     print("no open orders to cancel")
@@ -157,6 +159,10 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
   try:
     orders = []
     availableFunds = availQuoteFunds
+    bestAsk = contracts.asks[0][0]
+    for order in contracts.activeOrders:
+      if order['price'] == bestAsk and order['side'] == 1:
+        bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
@@ -178,12 +184,16 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
   try:
     orders = []
     availableFunds = availBaseFunds
+    bestBid = contracts.bids[0][0]
+    for order in contracts.activeOrders:
+      if order['price'] == bestBid and order['side'] == 0:
+        bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
         price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
-        if price < contracts.bestBid:
-          price = round(contracts.bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+        if price < bestBid:
+          price = round(bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
         qty = round(tools.getQty(price,1,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -195,7 +205,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker):
+async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice):
   global totalQtyFilled,totalQtyFilled2,totalQtyFilled3,totalQtyFilledLastUpdate,totalQtyFilled2LastUpdate,totalQtyFilled3LastUpdate
   replaceOrders = []
   newOrders = []
@@ -324,7 +334,11 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   replaceTx = False
   if len(replaceOrders) > 0:
     replaceTx = True
-    asyncio.create_task(replaceOrderList(replaceOrders, pairObj,shiftPrice,shiftQty))
+    sortedOrders = sorted(replaceOrders, key = lambda d: (d['side'],d['costDif']))
+    if marketPrice > lastUpdatePrice:
+      sortedOrders = sorted(replaceOrders, key = lambda d: (d['side'],d['costDif']),reverse=True)
+      
+    asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty))
   
   addTx = False
   if len(newOrders) > 0:
@@ -342,7 +356,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   return True
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
-  sortedOrders = sorted(orders, key = lambda d: d['costDif'])
   # print('replace orders:',time.time(), 'orders:', sortedOrders)
   
   updateIDs = []
@@ -350,7 +363,7 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
   prices = []
   quantities = []
   
-  for order in sortedOrders:
+  for order in orders:
     updateIDs.append(order['orderID'])
     clientOrderIDs.append(order['clientOrderID'])
     prices.append(Web3.to_wei(order["price"], shiftPrice))
@@ -358,8 +371,8 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
   
   print('replaceOrderList - Prices:', prices, 'quantities',quantities)
   try:
-    contracts.newPendingTx('replaceOrderList',sortedOrders)
-    gas = len(sortedOrders) * 1000000
+    contracts.newPendingTx('replaceOrderList',orders)
+    gas = len(orders) * 1000000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
       updateIDs,
       clientOrderIDs,
