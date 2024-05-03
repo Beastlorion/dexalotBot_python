@@ -219,9 +219,10 @@ async def dexalotBookFeed(pairObj):
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
   quoteDecimals = contracts[quote]["tokenDetails"]["evmdecimals"]
-  msg = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
+  msgOpen = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
+  msgClose = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   async with websockets.connect("wss://api.dexalot.com") as websocket:
-    await websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msgOpen))
     while status:
       try:
         message = str(await websocket.recv())
@@ -245,20 +246,23 @@ async def dexalotBookFeed(pairObj):
           bids = buildBids
           asks = buildAsks
       except websockets.ConnectionClosed:
-        await websocket.send(json.dumps(msg))
+        await websocket.send(json.dumps(msgClose))
+        await asyncio.sleep(0.5)
+        await websocket.send(json.dumps(msgOpen))
+        continue
       except Exception as error:
         print("error in dexalotBookFeed feed:", error)
         continue
-    msg = {"data":pairStr,"pair":pairStr,"type":"unsubscribe","decimal":3}
-    await websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msgClose))
     return
 
 async def dexalotOrderFeed():
   global addStatus, replaceStatus, refreshBalances, retrigger
   print("dexalotOrderFeed START")
-  msg = {"type":"tradereventsubscribe", "signature":signature}
+  msgOpen = {"type":"tradereventsubscribe", "signature":signature}
+  msgClose = {"type":"tradereventunsubscribe", "signature":signature}
   async with websockets.connect("wss://api.dexalot.com") as websocket:
-    await websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msgOpen))
     while status:
       try:
         message = str(await websocket.recv())
@@ -330,12 +334,14 @@ async def dexalotOrderFeed():
               if clientOrderID == order["clientOrderID"].decode('utf-8'):
                 order['status'] = data['status']
       except websockets.ConnectionClosed:
-        await websocket.send(json.dumps(msg))
+        await websocket.send(json.dumps(msgClose))
+        await asyncio.sleep(0.5)
+        await websocket.send(json.dumps(msgOpen))
+        continue
       except Exception as error:
         print("error in dexalotOrderFeed feed:", error)
         continue
-    msg = {"type":"tradereventunsubscribe", "signature":signature}
-    await websocket.send(json.dumps(msg))
+    await websocket.send(json.dumps(msgClose))
     return
         
 async def log_loop(event_filter, poll_interval):
