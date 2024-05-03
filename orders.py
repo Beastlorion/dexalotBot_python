@@ -160,9 +160,10 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
+    myBestAsk = False
     for order in contracts.activeOrders:
       if order['price'] == bestAsk and order['side'] == 1:
-        contracts.retrigger = True
+        myBestAsk = True
         # bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
@@ -170,6 +171,7 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
         price = round(marketPrice * (1 - spread),pairObj["quotedisplaydecimals"])
         if price > contracts.bestAsk:
           price = round(contracts.bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+          contracts.retrigger = True
         qty = round(tools.getQty(price,0,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -186,9 +188,10 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availBaseFunds
     bestBid = contracts.bestBid
+    myBestAsk = False
     for order in contracts.activeOrders:
       if order['price'] == bestBid and order['side'] == 0:
-        contracts.retrigger = True
+        myBestAsk = True
         # bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
@@ -196,6 +199,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
         if price < bestBid:
           price = round(bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+          contracts.retrigger = True
         qty = round(tools.getQty(price,1,level,availableFunds,pairObj),pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
@@ -359,8 +363,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       await asyncio.sleep(0.05)
     return False
   else:
-    contracts.retrigger = False
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)
   return True
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
