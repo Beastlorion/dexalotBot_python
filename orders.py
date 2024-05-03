@@ -360,7 +360,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     return False
   else:
     contracts.retrigger = False
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
   return True
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
