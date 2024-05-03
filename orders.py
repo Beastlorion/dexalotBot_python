@@ -159,10 +159,10 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
   try:
     orders = []
     availableFunds = availQuoteFunds
-    bestAsk = contracts.asks[0][0]
-    for order in contracts.activeOrders:
-      if order['price'] == bestAsk and order['side'] == 1:
-        bestAsk = contracts.asks[1][0]
+    bestAsk = contracts.bestAsk
+    # for order in contracts.activeOrders:
+    #   if order['price'] == bestAsk and order['side'] == 1:
+    #     bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
@@ -184,10 +184,10 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
   try:
     orders = []
     availableFunds = availBaseFunds
-    bestBid = contracts.bids[0][0]
-    for order in contracts.activeOrders:
-      if order['price'] == bestBid and order['side'] == 0:
-        bestBid = contracts.bids[1][0]
+    bestBid = contracts.bestBid
+    # for order in contracts.activeOrders:
+    #   if order['price'] == bestBid and order['side'] == 0:
+    #     bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
