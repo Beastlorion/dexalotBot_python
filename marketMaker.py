@@ -103,6 +103,7 @@ async def orderUpdater():
           continue
         else:
           contracts.refreshBalances = True
+          await contracts.refreshDexalotNonce()
           await asyncio.sleep(2)
           print("\n")
           continue
