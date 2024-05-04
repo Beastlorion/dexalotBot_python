@@ -112,9 +112,12 @@ async def getCustomPrice(base,quote):
             r.raise_for_status()
           prices = await r.read()
           prices = json.loads(prices.decode('utf-8'))
-          basePrice = prices[base + '-USD']
-          quotePrice = prices[quote + '-USD']
-          marketPrice = basePrice/quotePrice
+          if (quote == "AVAX"):
+            marketPrice = prices[base + '-AVAX']
+          else:
+            basePrice = prices[base + '-USD']
+            quotePrice = prices[quote + '-USD']
+            marketPrice = basePrice/quotePrice
       except Exception as error:
         print("error in getCustomPrice:", error)
       await asyncio.sleep(0.1)
