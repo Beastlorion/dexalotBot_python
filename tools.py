@@ -1,6 +1,6 @@
 import sys, os, asyncio, time, ast, json, boto3
 from botocore.exceptions import ClientError
-import price_feeds
+import price_feeds, contracts
 from dotenv import dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
@@ -89,12 +89,12 @@ def getPrivateKey(market,settings):
     pk = '0x' + pk
   return pk
 
-def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side):
+def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side,myBestOrder):
   qtyFilled = 0
   qtyAvailable = 0
   if side == 0:
     for order in book:
-      if order[0] < executePrice:
+      if order[0] < executePrice and order[0] < myBestOrder['price']:
         qtyFilled = qtyFilled + order[1]
       else:
         break
@@ -105,7 +105,7 @@ def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side):
         break
   if side == 1:
     for order in book:
-      if order[0] > executePrice:
+      if order[0] > executePrice and order[0] > myBestOrder['price']:
         qtyFilled = qtyFilled + order[1]
       else:
         break

@@ -21,9 +21,13 @@ openOrders = None
 totalQtyFilled = 0
 totalQtyFilled2 = 0
 totalQtyFilled3 = 0
+totalQtyFilled4 = 0
+totalQtyFilled5 = 0
 totalQtyFilledLastUpdate = 0
 totalQtyFilled2LastUpdate = 0
 totalQtyFilled3LastUpdate = 0
+totalQtyFilled4LastUpdate = 0
+totalQtyFilled5LastUpdate = 0
 
 failedReplaceAttempts = 0
 
@@ -160,10 +164,6 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
-    myBestAsk = False
-    for order in contracts.activeOrders:
-      if order['price'] == bestAsk and order['side'] == 1:
-        myBestAsk = True
         # bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       retrigger = False
@@ -218,7 +218,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
   return orders
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice):
-  global totalQtyFilled,totalQtyFilled2,totalQtyFilled3,totalQtyFilledLastUpdate,totalQtyFilled2LastUpdate,totalQtyFilled3LastUpdate
+  global totalQtyFilled,totalQtyFilled2,totalQtyFilled3,totalQtyFilled4,totalQtyFilled5,totalQtyFilledLastUpdate,totalQtyFilled2LastUpdate,totalQtyFilled3LastUpdate,totalQtyFilled4LastUpdate,totalQtyFilled5LastUpdate
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
@@ -226,16 +226,25 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   contracts.replaceStatus = 0
   contracts.addStatus = 0
   contracts.retrigger = False
+  bids = []
+  asks = []
+  for order in contracts.activeOrders:
+    if order['side'] == 0:
+      bids.append(order)
+    elif order['side'] == 1:
+      asks.append(order)
+  sortedBids = sorted(bids, key = lambda d: d['price'], reverse = True)
+  sortedAsks = sorted(asks, key = lambda d: d['price'])
   if taker:
     print("try taker")
     qtyFilled = 0
     if (time.time() - totalQtyFilledLastUpdate > 60):
       if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
         executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100)
-        qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
+        qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,sortedAsks[0])
       elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid:
         executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100)
-        qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
+        qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,sortedBids[0])
       totalQtyFilled = totalQtyFilled + qtyFilled
       totalQtyFilledLastUpdate = time.time()
     
@@ -243,10 +252,10 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       qtyFilled2 = 0
       if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100) > contracts.bestAsk:
         executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100)
-        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
+        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,sortedAsks[0])
       elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100) < contracts.bestBid:
         executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100)
-        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
+        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,sortedBids[0])
       totalQtyFilled2 = totalQtyFilled2 + qtyFilled2
       totalQtyFilled2LastUpdate = time.time()
     
@@ -254,16 +263,40 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
       qtyFilled3 = 0
       if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100) > contracts.bestAsk:
         executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100)
-        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0)
+        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,sortedAsks[0])
       elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100) < contracts.bestBid:
         executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100)
-        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1)
+        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,sortedBids[0])
       totalQtyFilled3 = totalQtyFilled3 + qtyFilled3
       totalQtyFilled3LastUpdate = time.time()
+    
+    if (time.time() - totalQtyFilled4LastUpdate > 60):
+      qtyFilled4 = 0
+      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold4']/100) > contracts.bestAsk:
+        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold4']/100)
+        qtyFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,sortedAsks[0])
+      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold4']/100) < contracts.bestBid:
+        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold4']/100)
+        qtyFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,sortedBids[0])
+      totalQtyFilled4 = totalQtyFilled4 + qtyFilled4
+      totalQtyFilled4LastUpdate = time.time()
+      
+    if (time.time() - totalQtyFilled5LastUpdate > 60):
+      qtyFilled5 = 0
+      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold5']/100) > contracts.bestAsk:
+        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold5']/100)
+        qtyFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,sortedAsks[0])
+      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold5']/100) < contracts.bestBid:
+        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold5']/100)
+        qtyFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,sortedBids[0])
+      totalQtyFilled5 = totalQtyFilled5 + qtyFilled5
+      totalQtyFilled5LastUpdate = time.time()
   
   print('totalQtyFilled',totalQtyFilled)
   print('totalQtyFilled2',totalQtyFilled2)
   print('totalQtyFilled3',totalQtyFilled3)
+  print('totalQtyFilled4',totalQtyFilled4)
+  print('totalQtyFilled5',totalQtyFilled5)
   
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
