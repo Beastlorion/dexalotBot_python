@@ -36,8 +36,8 @@ def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   volSpread = price_feeds.volSpread
   if side == 1:
     funds = funds * marketPrice
-  if (funds > totalFunds/2):
-    multiple = ((funds/totalFunds) - .5) * 20
+  if (funds < totalFunds/2):
+    multiple = ((funds/totalFunds) - .5) * 20 * -1
     defensiveSkew = multiple * settings["defensiveSkew"];
   spread = defensiveSkew/100 + level["spread"]/100 + volSpread/2
   return spread
