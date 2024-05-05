@@ -216,11 +216,13 @@ async def handleWebscokets(pairObj):
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
   quoteDecimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+  subscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
+  tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
+  unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
+  tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
   while status:
     try:
       async with websockets.connect("wss://api.dexalot.com") as websocket:
-        subscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
-        tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
         print("dexalotOrderFeed and dexalotBookFeed START")
@@ -320,7 +322,7 @@ async def handleWebscokets(pairObj):
           except Exception as error:
             print("error in dexalot websockets feed:", error)
             continue
-        await asyncio.gather(websocket.send(json.dumps(msgClose1)),websocket.send(json.dumps(msgClose2)))
+        await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)
     except Exception as error:
       print('error during handleWebscokets:',error)
