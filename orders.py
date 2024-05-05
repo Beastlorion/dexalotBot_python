@@ -140,6 +140,8 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
 async def cancelAllOrders(pairStr,shuttingDown = False):
   if shuttingDown:
     await asyncio.sleep(4)
+    contracts.refreshDexalotNonce()
+    await asyncio.sleep(1)
   for i in range(3):
     openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
