@@ -51,6 +51,7 @@ async def orderUpdater():
   levels = []
   lastUpdatePrice = 0
   lastUpdateTime = 0
+  failedCount = 0
   count = 0
   for i in settings['levels']:
     level = i
@@ -94,6 +95,7 @@ async def orderUpdater():
             contracts.activeOrders.remove(order)
         success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice)
         if success:
+          failedCount = 0
           lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice
           for level in levels:
@@ -111,6 +113,10 @@ async def orderUpdater():
         try:
           success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
           if not success:
+            failedCount = failedCount + 1
+            if failedCount > 5:
+              print('5 failed transactions. Shutting down...')
+              break
             continue
         except Exception as error:
           print("error in cancelOrderLevels", error)

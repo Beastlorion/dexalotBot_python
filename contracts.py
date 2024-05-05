@@ -199,10 +199,9 @@ def getRates(pairObj,pairByte32):
 async def startDataFeeds(pairObj):
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # a = asyncio.create_task(log_loop(block_filter, 0.5))
-  b = asyncio.create_task(dexalotOrderFeed())
-  c = asyncio.create_task(dexalotBookFeed(pairObj))
+  c = asyncio.create_task(handleWebscokets(pairObj))
   d = asyncio.create_task(updateBalancesLoop(pairObj))
-  await asyncio.gather(b,c,d)
+  await asyncio.gather(c,d)
   
 async def updateBalancesLoop(pairObj):
   while status:
@@ -211,91 +210,55 @@ async def updateBalancesLoop(pairObj):
     await asyncio.sleep(0.5)
   return
     
-  
-async def dexalotBookFeed(pairObj):
-  global bestAsk, bestBid, bids, asks
-  print("dexalotBookFeed START")
+async def handleWebscokets(pairObj):
+  global bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
   quoteDecimals = contracts[quote]["tokenDetails"]["evmdecimals"]
-  msgOpen = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
-  msgClose = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   while status:
-    async with websockets.connect("wss://api.dexalot.com") as websocket:
-      await websocket.send(json.dumps(msgOpen))
-      while status:
-        try:
-          message = str(await websocket.recv())
-          parsed = json.loads(message)
-          if parsed['type'] == 'orderBooks':
-            data = parsed['data']
-            bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
-            bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
-            # print(bestBid,bestAsk)
-            bidPrices = data['buyBook'][0]['prices'].split(',')
-            bidQtys = data['buyBook'][0]['quantities'].split(',')
-            askPrices = data['sellBook'][0]['prices'].split(',')
-            askQtys = data['sellBook'][0]['quantities'].split(',')
-            buildBids = []
-            buildAsks = []
+    try:
+      async with websockets.connect("wss://api.dexalot.com") as websocket:
+        subscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
+        tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
+        await websocket.send(json.dumps(subscribeBook))
+        await websocket.send(json.dumps(tradereventsubscribe))
+        print("dexalotOrderFeed and dexalotBookFeed START")
+        while status:
+          try:
+            message = str(await websocket.recv())
+            parsed = json.loads(message)
             
-            for i,price in enumerate(bidPrices):
-              buildBids.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(bidQtys[i]), baseShift)),baseDecimals)])
-            for i,price in enumerate(askPrices):
-              buildAsks.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(askQtys[i]), baseShift)),baseDecimals)])
-            bids = buildBids
-            asks = buildAsks
-        except websockets.ConnectionClosed:
-          await websocket.send(json.dumps(msgClose))
-          await asyncio.sleep(0.5)
-          break
-        except Exception as error:
-          print("error in dexalotBookFeed feed:", error)
-          continue
-  return
-
-async def dexalotOrderFeed():
-  global addStatus, replaceStatus, refreshBalances, retrigger
-  msgOpen = {"type":"tradereventsubscribe", "signature":signature}
-  msgClose = {"type":"tradereventunsubscribe", "signature":signature}
-  while status:
-    print("dexalotOrderFeed START")
-    async with websockets.connect("wss://api.dexalot.com") as websocket:
-      await websocket.send(json.dumps(msgOpen))
-      while status:
-        try:
-          message = str(await websocket.recv())
-          parsed = json.loads(message)
-          data = parsed['data']
-          if parsed['type'] == "orderStatusUpdateEvent":
-            hex1 = HexBytes(data["clientOrderId"])
-            a = bytes(hex1).decode('utf-8')
-            clientOrderID = str(a.replace('\x00',''))
-            if (data['status'] in ['PARTIAL']):
-              refreshBalances = True
-              for order in activeOrders:
-                if clientOrderID == order["clientOrderID"].decode('utf-8'):
-                    print("PARTIAL FILL:",data)
-                    order['orderID'] = data['orderId']
-                    order['qty'] = float(data['quantity'])
-                    order['qtyFilled'] = float(data['quantityfilled'])
-                    order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
-                    order['price'] = float(data['price'])
-                    order['side'] = int(data['sideId'])
-                    order['status'] = data['status']
-            elif data['status'] in ['FILLED','EXPIRED','KILLED']:
-              refreshBalances = True
-              for order in activeOrders:
-                if clientOrderID == order["clientOrderID"].decode('utf-8'):
-                  print('Order',data['status'],'and removed from activeOrders:',parsed)
-                  activeOrders.remove(order)
-            elif (data['status'] in ['NEW','REJECTED','CANCEL_REJECT']):
-              for tx in pendingTransactions:
-                if tx['purpose'] in ['addOrderList','replaceOrderList'] :
-                  for order in tx['orders']:
-                    if clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'NEW' and not order['tracked']:
-                      print("NEW ORDER:",clientOrderID)
+            if parsed['type'] == 'orderBooks':
+              data = parsed['data']
+              bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
+              bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
+              # print(bestBid,bestAsk)
+              bidPrices = data['buyBook'][0]['prices'].split(',')
+              bidQtys = data['buyBook'][0]['quantities'].split(',')
+              askPrices = data['sellBook'][0]['prices'].split(',')
+              askQtys = data['sellBook'][0]['quantities'].split(',')
+              buildBids = []
+              buildAsks = []
+              
+              for i,price in enumerate(bidPrices):
+                buildBids.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(bidQtys[i]), baseShift)),baseDecimals)])
+              for i,price in enumerate(askPrices):
+                buildAsks.append([round(float(Web3.from_wei(float(price), quoteShift)),quoteDecimals),round(float(Web3.from_wei(float(askQtys[i]), baseShift)),baseDecimals)])
+              bids = buildBids
+              asks = buildAsks
+              
+              
+            if parsed['type'] == "orderStatusUpdateEvent":
+              data = parsed['data']
+              hex1 = HexBytes(data["clientOrderId"])
+              a = bytes(hex1).decode('utf-8')
+              clientOrderID = str(a.replace('\x00',''))
+              if (data['status'] in ['PARTIAL']):
+                refreshBalances = True
+                for order in activeOrders:
+                  if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                      print("PARTIAL FILL:",data)
                       order['orderID'] = data['orderId']
                       order['qty'] = float(data['quantity'])
                       order['qtyFilled'] = float(data['quantityfilled'])
@@ -303,45 +266,65 @@ async def dexalotOrderFeed():
                       order['price'] = float(data['price'])
                       order['side'] = int(data['sideId'])
                       order['status'] = data['status']
-                      if tx['purpose'] in ['replaceOrderList']:
-                        for oldOrder in activeOrders:
-                          if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
-                            activeOrders.remove(oldOrder)
-                      activeOrders.append(order)
-                      order['tracked'] = True
-                    elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['REJECTED','CANCEL_REJECT']:
-                      print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
-                      if data['code'] == "T-T2PO-01":
-                        retrigger = True
-                      order['tracked'] = True
-                      if tx['purpose'] in ['replaceOrderList']:
-                        for oldOrder in activeOrders:
-                          if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
-                            activeOrders.remove(oldOrder)
-                  tracked = 0
-                  for order in tx['orders']:
-                    if order['tracked']:
-                      tracked = tracked+1
-                  if tracked == len(tx['orders']):
-                    print("COMPLETED",tx['purpose'],"ORDER TRACKING:", time.time())
-                    pendingTransactions.remove(tx)
-                    if (tx['purpose'] == 'addOrderList'):
-                      addStatus = 1
-                    elif (tx['purpose'] == 'replaceOrderList'):
-                      replaceStatus = 1
-            elif data['status'] == 'CANCELED':
-              for order in activeOrders:
-                if clientOrderID == order["clientOrderID"].decode('utf-8'):
-                  order['status'] = data['status']
-        except websockets.ConnectionClosed:
-          await websocket.send(json.dumps(msgClose))
-          await asyncio.sleep(0.5)
-          break
-        except Exception as error:
-          print("error in dexalotOrderFeed feed:", error)
-          continue
-  return
-        
+              elif data['status'] in ['FILLED','EXPIRED','KILLED']:
+                refreshBalances = True
+                for order in activeOrders:
+                  if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                    print('Order',data['status'],'and removed from activeOrders:',parsed)
+                    activeOrders.remove(order)
+              elif (data['status'] in ['NEW','REJECTED','CANCEL_REJECT']):
+                for tx in pendingTransactions:
+                  if tx['purpose'] in ['addOrderList','replaceOrderList'] :
+                    for order in tx['orders']:
+                      if clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'NEW' and not order['tracked']:
+                        print("NEW ORDER:",clientOrderID)
+                        order['orderID'] = data['orderId']
+                        order['qty'] = float(data['quantity'])
+                        order['qtyFilled'] = float(data['quantityfilled'])
+                        order['qtyLeft'] = float(data['quantity']) - float(data['quantityfilled'])
+                        order['price'] = float(data['price'])
+                        order['side'] = int(data['sideId'])
+                        order['status'] = data['status']
+                        if tx['purpose'] in ['replaceOrderList']:
+                          for oldOrder in activeOrders:
+                            if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                              activeOrders.remove(oldOrder)
+                        activeOrders.append(order)
+                        order['tracked'] = True
+                      elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['REJECTED','CANCEL_REJECT']:
+                        print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
+                        if data['code'] == "T-T2PO-01":
+                          retrigger = True
+                        order['tracked'] = True
+                        if tx['purpose'] in ['replaceOrderList']:
+                          for oldOrder in activeOrders:
+                            if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                              activeOrders.remove(oldOrder)
+                    tracked = 0
+                    for order in tx['orders']:
+                      if order['tracked']:
+                        tracked = tracked+1
+                    if tracked == len(tx['orders']):
+                      print("COMPLETED",tx['purpose'],"ORDER TRACKING:", time.time())
+                      pendingTransactions.remove(tx)
+                      if (tx['purpose'] == 'addOrderList'):
+                        addStatus = 1
+                      elif (tx['purpose'] == 'replaceOrderList'):
+                        replaceStatus = 1
+              elif data['status'] == 'CANCELED':
+                for order in activeOrders:
+                  if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                    order['status'] = data['status']
+          except websockets.ConnectionClosed:
+            break
+          except Exception as error:
+            print("error in dexalot websockets feed:", error)
+            continue
+        await asyncio.gather(websocket.send(json.dumps(msgClose1)),websocket.send(json.dumps(msgClose2)))
+        await asyncio.sleep(1)
+    except Exception as error:
+      print('error during handleWebscokets:',error)
+      
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
   while status:
