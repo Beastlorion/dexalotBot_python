@@ -49,8 +49,9 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
           if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
             matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
             record['orderID'] = order["id"]
-            record['orderID'] = order["id"]
-            record['orderID'] = order["id"]
+            record['qtyLeft'] = float(order['quantity']) - float(order['quantityfilled'])
+            record['price'] = float(order['price'])
+            record['side'] = float(order['side'])
             
         if len(matches) == 0: # if no record, cancel order
           print("UNMATCHED ORDER:", order, "\n", "record")
@@ -362,7 +363,10 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     elif len(matches) > 1:
       print("MATCHES with duplicate:",matches)
       for orderToCancel in matches:
-        orderIDsToCancel = orderIDsToCancel + matches['orderID']
+        orderIDsToCancel = orderIDsToCancel + orderToCancel['orderID']
+        for activeOrder in activeOrders:
+          if activeOrder['clientOrderID'] == orderToCancel['clientOrderID']:
+            activeOrders.remove(activeOrder)
     # if len(matches) > 1:
     #   sortedMatches = sorted(matches, key = lambda d: d['timestamp'])
     #   matches = sortedMatches[-1]
