@@ -322,7 +322,8 @@ async def handleWebscokets(pairObj):
             break
           except Exception as error:
             print("error in dexalot websockets feed:", error)
-            if parsed['type'] == "orderStatusUpdateEvent":
+            if parsed['type'] == "orderStatusUpdateEvent" and parsed['data']['status'] in ['NEW','PARTIAL']:
+              print("FAILED ORDER:", parsed['data'])
               await orders.cancelOrderList([parsed['data']['orderId']])
               refreshActiveOrders = True
               continue
