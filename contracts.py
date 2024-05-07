@@ -254,7 +254,7 @@ async def handleWebscokets(pairObj):
               
             if parsed['type'] == "orderStatusUpdateEvent":
               data = parsed['data']
-              hex1 = HexBytes(data["clientOrderId"])
+              hex1 = HexBytes(data["clientOrderId"][2:])
               a = bytes(hex1).decode('utf-8')
               clientOrderID = str(a.replace('\x00',''))
               if (data['status'] in ['PARTIAL']):
@@ -322,13 +322,9 @@ async def handleWebscokets(pairObj):
             break
           except Exception as error:
             print("error in dexalot websockets feed:", error)
-            if parsed['type'] == "orderStatusUpdateEvent" and parsed['data']['status'] in ['NEW','PARTIAL']:
-              print("FAILED ORDER:", parsed['data'])
-              await orders.cancelOrderList([parsed['data']['orderId']])
-              refreshActiveOrders = True
-              continue
-            else:
-              break
+            # if parsed['type'] == "orderStatusUpdateEvent":
+            #   print("FAILED ORDER:", parsed['data'])
+            #   refreshActiveOrders = True
             continue
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)
