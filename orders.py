@@ -337,10 +337,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   
   limit_orders = buyOrders + sellOrders
   
-  if len(limit_orders) == 0:
-    await asyncio.sleep(2)
-    return True
-  
   for newOrder in limit_orders:
     matches = []
     skip = False

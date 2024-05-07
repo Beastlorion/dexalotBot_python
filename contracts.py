@@ -48,6 +48,7 @@ asks = []
 baseShift = 'ether'
 quoteShift = 'ether'
 retrigger = False
+refreshActiveOrders = False
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -317,10 +318,11 @@ async def handleWebscokets(pairObj):
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']
-          except websockets.ConnectionClosed:
-            break
+          # except websockets.ConnectionClosed:
+          #   break
           except Exception as error:
             print("error in dexalot websockets feed:", error)
+            refreshActiveOrders = True
             break
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)

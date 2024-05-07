@@ -67,6 +67,12 @@ async def orderUpdater():
       print("waiting for market data")
       await asyncio.sleep(2)
       continue
+    if contracts.refreshActiveOrders:
+      await asyncio.sleep(2)
+      await orders.getOpenOrders(pairStr,True)
+      contracts.refreshActiveOrders = False
+      await asyncio.sleep(1)
+      continue
     levelsToUpdate = 0
     for level in levels:
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
