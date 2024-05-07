@@ -321,7 +321,7 @@ async def handleWebscokets(pairObj):
             break
           except Exception as error:
             print("error in dexalot websockets feed:", error)
-            continue
+            break
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)
     except Exception as error:
