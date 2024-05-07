@@ -1,7 +1,7 @@
 import sys, os, asyncio, time, ast, json
 from hexbytes import HexBytes
 import websockets
-import tools
+import tools, orders
 from dotenv import dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
@@ -318,12 +318,17 @@ async def handleWebscokets(pairObj):
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']
-          # except websockets.ConnectionClosed:
-          #   break
+          except websockets.ConnectionClosed:
+            break
           except Exception as error:
             print("error in dexalot websockets feed:", error)
-            refreshActiveOrders = True
-            break
+            if parsed['type'] == "orderStatusUpdateEvent":
+              await orders.cancelOrderList([parsed['data']['orderId']])
+              refreshActiveOrders = True
+              continue
+            else:
+              break
+            continue
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)
     except Exception as error:
