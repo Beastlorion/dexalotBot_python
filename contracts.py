@@ -321,8 +321,9 @@ async def handleWebscokets(pairObj):
                     order['status'] = data['status']
               activeOrderIDs = []
               for activeOrder in activeOrders:
-                activeOrderIDs.append(activeOrder['clientOrderID'])
+                activeOrderIDs.append(activeOrder['clientOrderID'].decode('utf-8'))
               if clientOrderID not in activeOrderIDs and data['status'] in ['NEW','PARTIAL'] and data['type2Id'] == 3:
+                print(activeOrderIDs, clientOrderID)
                 orderIDsToCancel.append(data['orderId'])
           except websockets.ConnectionClosed:
             break

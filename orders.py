@@ -173,8 +173,8 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
         price = round(marketPrice * (1 - spread),pairObj["quotedisplaydecimals"])
-        if price > contracts.bestAsk:
-          price = round(contracts.bestAsk - tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+        if price > bestAsk:
+          price = math.floor((bestAsk * pow(10,pairObj["quotedisplaydecimals"])) - 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,0,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
@@ -205,7 +205,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
         price = round(marketPrice * (1 + spread),pairObj["quotedisplaydecimals"])
         if price < bestBid:
-          price = round(bestBid + tools.getIncrement(pairObj["quotedisplaydecimals"]),pairObj["quotedisplaydecimals"])
+          price = math.ceil((bestBid * pow(10,pairObj["quotedisplaydecimals"])) + 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
