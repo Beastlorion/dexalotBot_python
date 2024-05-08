@@ -271,6 +271,7 @@ async def handleWebscokets(pairObj):
                       order['side'] = int(data['sideId'])
                       order['status'] = data['status']
               elif data['status'] in ['FILLED','EXPIRED','KILLED']:
+                print("order closed:",data)
                 refreshBalances = True
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
@@ -319,6 +320,11 @@ async def handleWebscokets(pairObj):
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']
+              for tx in pendingTransactions:
+                for order in tx['orders']:
+                  if clientOrderID == order["clientOrderID"].decode('utf-8') and not order['tracked']:
+                    print('UNTRACKED ORDER:',data)
+                    status = False
               activeOrderIDs = []
               for activeOrder in activeOrders:
                 activeOrderIDs.append(activeOrder['clientOrderID'].decode('utf-8'))
