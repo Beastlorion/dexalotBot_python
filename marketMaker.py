@@ -67,6 +67,8 @@ async def orderUpdater():
       print("waiting for market data")
       await asyncio.sleep(2)
       continue
+    if len(contracts.orderIDsToCancel) > 0:
+      orders.cancelOrderList(contracts.orderIDsToCancel)
     if contracts.refreshActiveOrders:
       await asyncio.sleep(2)
       await orders.getOpenOrders(pairStr,True)

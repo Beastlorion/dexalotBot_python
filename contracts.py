@@ -49,6 +49,7 @@ baseShift = 'ether'
 quoteShift = 'ether'
 retrigger = False
 refreshActiveOrders = False
+orderIDsToCancel = []
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -212,7 +213,7 @@ async def updateBalancesLoop(pairObj):
   return
     
 async def handleWebscokets(pairObj):
-  global bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger
+  global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
@@ -318,15 +319,20 @@ async def handleWebscokets(pairObj):
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']
+              activeOrderIDs = []
+              for activeOrder in activeOrders:
+                activeOrderIDs.append(activeOrder['clientOrderID'])
+              if clientOrderID not in activeOrderIDs and data['status'] in ['NEW','PARTIAL'] and data['type2Id'] == 3:
+                orderIDsToCancel.append(data['orderId'])
           except websockets.ConnectionClosed:
             break
           except Exception as error:
             if parsed['type'] == "orderStatusUpdateEvent":
-              print("FAILED ORDER:", parsed['data'])
+              print("FAILED ORDER TRACKING:", parsed['data'])
+              status = False
               refreshActiveOrders = True
             continue
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
-        await asyncio.sleep(1)
     except Exception as error:
       print('error during handleWebscokets:',error)
       
