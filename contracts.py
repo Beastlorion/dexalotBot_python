@@ -321,10 +321,9 @@ async def handleWebscokets(pairObj):
           except websockets.ConnectionClosed:
             break
           except Exception as error:
-            print("error in dexalot websockets feed:", error)
-            # if parsed['type'] == "orderStatusUpdateEvent":
-            #   print("FAILED ORDER:", parsed['data'])
-            #   refreshActiveOrders = True
+            if parsed['type'] == "orderStatusUpdateEvent":
+              print("FAILED ORDER:", parsed['data'])
+              refreshActiveOrders = True
             continue
         await asyncio.gather(websocket.send(json.dumps(unsubscribeBook)),websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(1)
