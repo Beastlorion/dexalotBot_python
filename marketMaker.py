@@ -113,7 +113,13 @@ async def orderUpdater():
           print("\n")
           continue
         else:
+          failedCount = failedCount + 1
+          if failedCount > 5:
+            print('5 failed transactions. Shutting down...')
+            contracts.status = False
+            break
           contracts.refreshBalances = True
+          contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
           await asyncio.sleep(2)
           print("\n")
@@ -122,10 +128,6 @@ async def orderUpdater():
         try:
           success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
           if not success:
-            failedCount = failedCount + 1
-            if failedCount > 5:
-              print('5 failed transactions. Shutting down...')
-              break
             continue
         except Exception as error:
           print("error in cancelOrderLevels", error)
