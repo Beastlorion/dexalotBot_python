@@ -59,9 +59,9 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
         elif len(matches) > 1: # if more than one record, cancel order
           print("DUPLICATE ORDER:", order, "\n", "record")
           orderIDsToCancel.append(order["id"])
-        if len(orderIDsToCancel) > 0:
-          print("ORDERS TO CANCEL:", orderIDsToCancel)
-          await cancelOrderList(orderIDsToCancel)
+      if len(orderIDsToCancel) > 0:
+        print("ORDERS TO CANCEL:", orderIDsToCancel)
+        await cancelOrderList(orderIDsToCancel)
   except Exception as error:
     print("error in getOpenOrders:", error)
   print("finished getting open orders:",time.time())
