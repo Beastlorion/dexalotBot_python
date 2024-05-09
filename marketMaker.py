@@ -69,15 +69,13 @@ async def orderUpdater(base,quote):
       continue
     if len(contracts.orderIDsToCancel) > 0:
       await orders.cancelOrderList(contracts.orderIDsToCancel)
-      await asyncio.sleep(2)
       contracts.orderIDsToCancel = []
     if contracts.refreshActiveOrders:
       await orders.getOpenOrders(pairStr,True)
       contracts.refreshActiveOrders = False
-      await asyncio.sleep(2)
       continue
     if contracts.refreshBalances:
-      await contracts.getBalances(base,quote)
+      contracts.getBalances(base,quote)
     levelsToUpdate = 0
     for level in levels:
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
