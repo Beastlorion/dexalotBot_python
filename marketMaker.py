@@ -69,12 +69,12 @@ async def orderUpdater():
       continue
     if len(contracts.orderIDsToCancel) > 0:
       await orders.cancelOrderList(contracts.orderIDsToCancel)
+      await asyncio.sleep(2)
       contracts.orderIDsToCancel = []
     if contracts.refreshActiveOrders:
-      await asyncio.sleep(2)
       await orders.getOpenOrders(pairStr,True)
       contracts.refreshActiveOrders = False
-      await asyncio.sleep(1)
+      await asyncio.sleep(2)
       continue
     levelsToUpdate = 0
     for level in levels:
@@ -121,7 +121,6 @@ async def orderUpdater():
           contracts.refreshBalances = True
           contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
-          await asyncio.sleep(2)
           print("\n")
           continue
       else:
