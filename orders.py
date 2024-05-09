@@ -398,10 +398,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   replaceTx = False
   if len(replaceOrders) > 0:
     replaceTx = True
-    sortedOrders = sorted(replaceOrders, key = lambda d: (d['side'],d['costDif']))
-    if marketPrice > lastUpdatePrice:
-      sortedOrders = sorted(replaceOrders, key = lambda d: (d['side'],d['costDif']),reverse=True)
-      
+    sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
     asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty))
   
   addTx = False
