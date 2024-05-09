@@ -41,12 +41,14 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
     # print("open orders:",openOrders)
     openOrders = json.loads(openOrdersJson)
     if len(contracts.activeOrders)>0 and refreshActiveOrders:
+      trackedOrderIDs = []
       orderIDsToCancel = []
       for order in openOrders["rows"]:
         a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
         matches = []
         for record in contracts.activeOrders:
           if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
+            trackedOrderIDs.append(record["clientOrderID"])
             matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
             record['orderID'] = order["id"]
             record['qtyLeft'] = float(order['quantity']) - float(order['quantityfilled'])
@@ -62,6 +64,10 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
       if len(orderIDsToCancel) > 0:
         print("ORDERS TO CANCEL:", orderIDsToCancel)
         await cancelOrderList(orderIDsToCancel)
+      for record in contracts.activeOrders:
+        if record['clientOrderID'] not in trackedOrderIDs:
+          print("ORDER NO LONGER EXISTS:", record)
+          contracts.activeOrders.remove(record)
   except Exception as error:
     print("error in getOpenOrders:", error)
   print("finished getting open orders:",time.time())
