@@ -337,10 +337,10 @@ async def handleWebscokets(pairObj):
             if parsed['type'] == "orderStatusUpdateEvent":
               print("FAILED ORDER TRACKING:", parsed['data'])
               status = False
-              refreshActiveOrders = True
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
+        refreshActiveOrders = True
     except Exception as error:
       print('error during handleWebscokets:',error)
       
