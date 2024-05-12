@@ -24,7 +24,7 @@ async def startPriceFeed(market,settings):
   else:
     client = await AsyncClient.create()
     bm = BinanceSocketManager(client)
-    if quote == "USDC" and base != "EUROC" and base != "USDT":
+    if quote == "USDC" and base != "EUROC" and base != "USDT" and not settings['useBybitPrice']:
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "AVAX" and quote == "USDT":
@@ -33,8 +33,8 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
-  if (settings['takerEnabled']):
-    asyncio.create_task(bybitFeed(base, quote))
+  if (settings['takerEnabled'] or settings['useBybitPrice']):
+    asyncio.create_task(bybitFeed(base, quote, settings['useBybitPrice']))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
@@ -45,10 +45,6 @@ async def usdtUpdater():
 
 async def startTicker(client, bm, base, quote):
   global marketPrice
-  if base == "BTC":
-    base = "BTC"
-  elif base == "ETH":
-    base = "ETH"
   symbol = base + 'USDT'
 
   # start any sockets here, i.e a trade socket
@@ -138,7 +134,7 @@ async def getVolSpread(base,quote):
         print("error in getVolSpread:", error)
       await asyncio.sleep(1)
       
-async def bybitFeed (base,quote):
+async def bybitFeed (base,quote,useBybitPrice):
   ws = WebSocket(
     testnet=False,
     channel_type="spot",
@@ -149,7 +145,7 @@ async def bybitFeed (base,quote):
     convert = True
     
   def handle_orderbook(message):
-    global bybitBids,bybitAsks
+    global bybitBids,bybitAsks,marketPrice
     try:
       if message['topic'] == "orderbook.50."+base+quote:
         if time.time() - message['ts'] < 5:
@@ -167,6 +163,8 @@ async def bybitFeed (base,quote):
               buildAsks.append([float(ask[0]),float(ask[1])])
           bybitBids = sorted(buildBids, key=lambda tup: tup[0], reverse=True)
           bybitAsks = sorted(buildAsks, key=lambda tup: tup[0])
+          if useBybitPrice:
+            marketPrice = (bybitBids[0][0] + bybitAsks[0][0])/2
     except Exception as error:
       print('error in handle_orderbook bybit:',error)
         

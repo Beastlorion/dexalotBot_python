@@ -44,29 +44,29 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
       trackedOrderIDs = []
       orderIDsToCancel = []
       for order in openOrders["rows"]:
-        a = bytes(HexBytes(order["clientordid"])).decode('utf-8')
+        a = bytes(HexBytes(order["clientordid"][2:])).decode('utf-8')
+        a = str(a.replace('\x00',''))
         matches = []
         for record in contracts.activeOrders:
-          if a.replace('\x00','') == record["clientOrderID"].decode('utf-8'):
+          if a == record["clientOrderID"].decode('utf-8'):
             trackedOrderIDs.append(record["clientOrderID"])
             matches.append({'orderID':order["id"], 'clientOrderID':record["clientOrderID"], 'level':int(record['level']), 'qtyLeft': float(order['quantity']) - float(order['quantityfilled']), 'price': float(order['price']),'side': int(order['side'])})
             record['orderID'] = order["id"]
             record['qtyLeft'] = float(order['quantity']) - float(order['quantityfilled'])
             record['price'] = float(order['price'])
             record['side'] = float(order['side'])
-            
         if len(matches) == 0: # if no record, cancel order
-          print("UNMATCHED ORDER:", order, "\n", "record")
+          print("NO RECORD:", order, "\n")
           orderIDsToCancel.append(order["id"])
         elif len(matches) > 1: # if more than one record, cancel order
-          print("DUPLICATE ORDER:", order, "\n", "record")
+          print("DUPLICATE RECORD:", order, "\n")
           orderIDsToCancel.append(order["id"])
       if len(orderIDsToCancel) > 0:
         print("ORDERS TO CANCEL:", orderIDsToCancel)
         await cancelOrderList(orderIDsToCancel)
       for record in contracts.activeOrders:
         if record['clientOrderID'] not in trackedOrderIDs:
-          print("ORDER NO LONGER EXISTS:", record)
+          print("ORDER NOT FOUND:", record)
           contracts.activeOrders.remove(record)
   except Exception as error:
     print("error in getOpenOrders:", error)
@@ -315,13 +315,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   print('totalQtyFilled4',totalQtyFilled4)
   print('totalQtyFilled5',totalQtyFilled5)
   
-  totalBaseFunds = float(contracts.contracts[base]["portfolioTot"]) * .999
-  totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"]) * .999
+  totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
+  totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
   # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
   # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
-  availBaseFunds = totalBaseFunds
-  availQuoteFunds = totalQuoteFunds
+  availBaseFunds = totalBaseFunds * .999
+  availQuoteFunds = totalQuoteFunds * .999
   
   for order in contracts.activeOrders:
     if order['side'] == 0:

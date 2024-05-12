@@ -52,6 +52,7 @@ async def orderUpdater(base,quote):
   lastUpdatePrice = 0
   lastUpdateTime = 0
   failedCount = 0
+  strikes = 0
   count = 0
   for i in settings['levels']:
     level = i
@@ -104,6 +105,7 @@ async def orderUpdater(base,quote):
             contracts.activeOrders.remove(order)
         success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice)
         if success:
+          strikes = 0
           failedCount = 0
           lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice
@@ -114,10 +116,14 @@ async def orderUpdater(base,quote):
           continue
         else:
           failedCount = failedCount + 1
-          if failedCount > 5:
-            print('5 failed transactions. Shutting down...')
-            contracts.status = False
-            break
+          if failedCount > 3:
+            print('3 failed transactions. Cancel all orders...')
+            strikes = strikes + 1
+            if strikes == 3:
+              contracts.status = False
+              break
+            await orders.cancelAllOrders(pairStr)
+            await asyncio.sleep(2)
           contracts.refreshBalances = True
           contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
