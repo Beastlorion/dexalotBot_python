@@ -208,7 +208,7 @@ async def startDataFeeds(pairObj):
 async def updateBalancesLoop(pairObj):
   while status:
     if (refreshBalances):
-      await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1])
+      await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1],pairObj)
     await asyncio.sleep(0.5)
   return
     
@@ -216,8 +216,8 @@ async def handleWebscokets(pairObj):
   global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
-  baseDecimals = contracts[base]["tokenDetails"]["evmdecimals"]
-  quoteDecimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+  baseDecimals = pairObj['base_evmdecimals']
+  quoteDecimals = pairObj['quote_evmdecimals']
   subscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
   tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
@@ -417,7 +417,7 @@ def newPendingTx(purpose,orders = []):
   print('New pending transaction:', purpose, len(orders), time.time())
   pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
-def getBalances(base, quote):
+def getBalances(base, quote, pairObj):
   print("get balances",time.time())
   global refreshBalances, baseShift, quoteShift
   portfolio = contracts["PortfolioSub"]["deployedContract"]
@@ -443,7 +443,7 @@ def getBalances(base, quote):
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
     if base != "ALOT" and base != "AVAX":
-      decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+      decimals = pairObj['base_evmdecimals']
       baseShift = 'ether'
       match decimals:
         case 6:
@@ -459,7 +459,7 @@ def getBalances(base, quote):
       # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
-      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+      decimals = pairObj['quote_evmdecimals']
       quoteShift = 'ether'
       match decimals:
         case 6:

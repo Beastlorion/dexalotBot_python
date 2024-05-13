@@ -41,7 +41,7 @@ async def start():
   await orders.cancelAllOrders(pairStr)
   await asyncio.sleep(4)
   
-  contracts.getBalances(base,quote)
+  contracts.getBalances(base,quote,pairObj)
   orders.getBestOrders()
   await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater(base,quote))
   contracts.status = False
@@ -76,7 +76,7 @@ async def orderUpdater(base,quote):
       contracts.refreshActiveOrders = False
       continue
     if contracts.refreshBalances:
-      contracts.getBalances(base,quote)
+      contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
     for level in levels:
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
@@ -139,7 +139,7 @@ async def orderUpdater(base,quote):
           continue
         try: 
           await asyncio.gather(
-            contracts.getBalances(base, quote),
+            contracts.getBalances(base, quote,pairObj),
             orders.getBestOrders()
           )
         except Exception as error:
