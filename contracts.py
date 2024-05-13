@@ -99,13 +99,16 @@ async def initializeProviders(market,settings):
   account: LocalAccount = Account.from_key(private_key)
   contracts["SubNetProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
   contracts["AvaxcProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
+  contracts["ArbProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
   
   # set default account
   contracts["SubNetProvider"]["provider"].eth.default_account = account.address
   contracts["AvaxcProvider"]["provider"].eth.default_account = account.address
+  contracts["ArbProvider"]["provider"].eth.default_account = account.address
   
   contracts["SubNetProvider"]["provider"].strict_bytes_type_checking = False
   contracts["AvaxcProvider"]["provider"].strict_bytes_type_checking = False
+  contracts["ArbProvider"]["provider"].strict_bytes_type_checking = False
   global address, signature
   address = account.address
   message = encode_defunct(text="dexalot")
@@ -114,6 +117,7 @@ async def initializeProviders(market,settings):
   signature = address + ':' + signedMessage.signature.hex()
   contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
+  contracts["arbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
   print('finished initializeProviders')
   
 async def initializeContracts(market,pairObj):
