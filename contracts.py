@@ -117,7 +117,7 @@ async def initializeProviders(market,settings):
   signature = address + ':' + signedMessage.signature.hex()
   contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
-  contracts["arbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
+  contracts["ArbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
   print('finished initializeProviders')
   
 async def initializeContracts(market,pairObj):
