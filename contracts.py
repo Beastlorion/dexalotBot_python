@@ -82,6 +82,13 @@ async def initializeProviders(market,settings):
   }
   # await contracts["AvaxcProvider"]['provider'].is_connected()
   contracts["AvaxcProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
+  contracts["ArbProvider"] = {
+    "provider": Web3(Web3.HTTPProvider(config["arb_rpc_url"])),
+    # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
+    "nonce": 0
+  }
+  # await contracts["AvaxcProvider"]['provider'].is_connected()
+  contracts["ArbProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
   if len(settings['secret_name'])>0:
     private_key = tools.getPrivateKey(market,settings)
   else:
@@ -109,7 +116,7 @@ async def initializeProviders(market,settings):
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
   print('finished initializeProviders')
   
-async def initializeContracts(market,pairStr):
+async def initializeContracts(market,pairObj):
   base = tools.getSymbolFromName(market,0)
   quote = tools.getSymbolFromName(market,1)
   
@@ -155,8 +162,8 @@ async def initializeContracts(market,pairStr):
   contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSubHelper"]["address"], abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
   contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["TradePairs"]["address"], abi=contracts["TradePairs"]["abi"]["abi"])
   contracts["OrderBooks"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["OrderBooks"]["address"], abi=contracts["OrderBooks"]["abi"]["abi"])
-  contracts["OrderBooks"]["id0"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairStr.encode('utf-8'), 0).call()
-  contracts["OrderBooks"]["id1"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairStr.encode('utf-8'), 1).call()
+  contracts["OrderBooks"]["id0"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairObj['pair'].encode('utf-8'), 0).call()
+  contracts["OrderBooks"]["id1"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairObj['pair'].encode('utf-8'), 1).call()
   
   if base == 'sAVAX':
     contracts["sAVAX"]["proxy"] = contracts["AvaxcProvider"]["provider"].eth.contract(address='0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE', abi=savaxABI)
@@ -165,7 +172,10 @@ async def initializeContracts(market,pairStr):
   for item in tokens:
     if item["subnet_symbol"] in contracts and item["subnet_symbol"] != "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item
-      contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+      if item['env'] == "production-multi-avax":
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+      elif item['env'] == "production-multi-arb":
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
     elif item["subnet_symbol"] == "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item
   print('finished initializeContracts')
@@ -216,8 +226,8 @@ async def handleWebscokets(pairObj):
   global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
-  baseDecimals = pairObj['base_evmdecimals']
-  quoteDecimals = pairObj['quote_evmdecimals']
+  baseDecimals = pairObj['basedisplaydecimals']
+  quoteDecimals = pairObj['quotedisplaydecimals']
   subscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"subscribe","decimal":pairObj["quotedisplaydecimals"]}
   tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
@@ -418,7 +428,6 @@ def newPendingTx(purpose,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
 def getBalances(base, quote, pairObj):
-  print("get balances",time.time())
   global refreshBalances, baseShift, quoteShift
   portfolio = contracts["PortfolioSub"]["deployedContract"]
   
@@ -443,7 +452,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
     if base != "ALOT" and base != "AVAX":
-      decimals = pairObj['base_evmdecimals']
+      decimals = contracts[base]["tokenDetails"]["evmdecimals"]
       baseShift = 'ether'
       match decimals:
         case 6:
@@ -459,7 +468,7 @@ def getBalances(base, quote, pairObj):
       # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
-      decimals = pairObj['quote_evmdecimals']
+      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
       quoteShift = 'ether'
       match decimals:
         case 6:

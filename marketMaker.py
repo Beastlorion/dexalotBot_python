@@ -26,7 +26,7 @@ async def start():
   if (pairObj is None):
     print("failed to get pairObj")
     return
-  
+  # print(pairObj)
   async with aiohttp.ClientSession() as s:
     tasks = []
     tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s),contracts.getDeployments("PortfolioSubHelper",s)]
@@ -35,7 +35,7 @@ async def start():
     
     
   await contracts.initializeProviders(market,settings)
-  await contracts.initializeContracts(market,pairStr)
+  await contracts.initializeContracts(market,pairObj)
   contracts.getRates(pairObj,pairByte32)
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
