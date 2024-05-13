@@ -161,7 +161,6 @@ async def initializeContracts(market,pairObj):
     "deployedContract": None
   }
   
-  contracts["PortfolioMain"]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
   contracts["PortfolioSub"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSub"]["address"], abi=contracts["PortfolioSub"]["abi"]["abi"])
   contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSubHelper"]["address"], abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
   contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["TradePairs"]["address"], abi=contracts["TradePairs"]["abi"]["abi"])
@@ -178,8 +177,10 @@ async def initializeContracts(market,pairObj):
       contracts[item["subnet_symbol"]]["tokenDetails"] = item
       if item['env'] == "production-multi-avax":
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts["PortfolioMain"]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
       elif item['env'] == "production-multi-arb":
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts["PortfolioMain"]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
     elif item["subnet_symbol"] == "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item
   print('finished initializeContracts')
