@@ -27,7 +27,7 @@ async def startPriceFeed(market,settings):
     if quote == "USDC" and base != "EUROC" and base != "USDT" and not settings['useBybitPrice']:
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-    elif base == "AVAX" and quote == "USDT":
+    elif quote == "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
     elif base == "USDT" and quote == "USDC":
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
