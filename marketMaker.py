@@ -70,10 +70,12 @@ async def orderUpdater(base,quote):
       continue
     if len(contracts.orderIDsToCancel) > 0:
       await orders.cancelOrderList(contracts.orderIDsToCancel)
+      await asyncio.sleep(3)
       contracts.orderIDsToCancel = []
     if contracts.refreshActiveOrders:
       await orders.getOpenOrders(pairStr,True)
       contracts.refreshActiveOrders = False
+      await asyncio.sleep(3)
       continue
     if contracts.refreshBalances:
       contracts.getBalances(base,quote,pairObj)
