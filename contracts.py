@@ -217,15 +217,15 @@ async def startDataFeeds(pairObj):
   block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # a = asyncio.create_task(log_loop(block_filter, 0.5))
   c = asyncio.create_task(handleWebscokets(pairObj))
-  d = asyncio.create_task(updateBalancesLoop(pairObj))
-  await asyncio.gather(c,d)
+  # d = asyncio.create_task(updateBalancesLoop(pairObj))
+  await asyncio.gather(c)
   
-async def updateBalancesLoop(pairObj):
-  while status:
-    if (refreshBalances):
-      await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1],pairObj)
-    await asyncio.sleep(0.5)
-  return
+# async def updateBalancesLoop(pairObj):
+#   while status:
+#     if (refreshBalances):
+#       await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1],pairObj)
+#     await asyncio.sleep(0.5)
+#   return
     
 async def handleWebscokets(pairObj):
   global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel
