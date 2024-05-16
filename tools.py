@@ -1,7 +1,10 @@
-import sys, os, asyncio, time, ast, json
-from dotenv import load_dotenv, dotenv_values
+import sys, os, asyncio, time, ast, json, boto3
+from botocore.exceptions import ClientError
+import price_feeds, contracts
+from dotenv import dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
+from multiprocessing import Process
 
 def getSymbolFromName(market,position):
   return market.split('_')[position]
@@ -26,25 +29,17 @@ async def getPairObj(pair, apiUrl):
       return item
 
 def getIncrement(quoteDisplayDecimals):
-  increment = '0.'
-  for i in range(quoteDisplayDecimals):
-    if i < quoteDisplayDecimals - 1:
-      increment += '0'
-    else:
-      increment += '1'
-  return float(increment);
+  return float(1 * pow(10,-1 * quoteDisplayDecimals));
     
-def getSpread(marketPrice,priceChange,settings,funds,totalFunds,level,side):
-  slip = 0
+def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0
+  volSpread = price_feeds.volSpread
   if side == 1:
     funds = funds * marketPrice
-  if priceChange > settings["refreshTolerance"] * 2:
-    slip = (priceChange/2)
-  if (funds > totalFunds/2):
-    multiple = ((funds/totalFunds) - .5) * 20
+  if (funds < totalFunds/2):
+    multiple = ((funds/totalFunds) - .5) * 20 * -1
     defensiveSkew = multiple * settings["defensiveSkew"];
-  spread = slip/100 + defensiveSkew/100 + level["spread"]/100
+  spread = defensiveSkew/100 + level["spread"]/100 + volSpread/2
   return spread
 
 def getQty(price, side, level, availableFunds,pairObj):
@@ -66,4 +61,64 @@ def getQty(price, side, level, availableFunds,pairObj):
       return 0
   else: 
     return 0
-  
+
+def getPrivateKey(market,settings):
+
+  secret_name = settings['secret_name']
+  region_name = settings['secret_location']
+
+  # Create a Secrets Manager client
+  session = boto3.session.Session()
+  client = session.client(
+      service_name='secretsmanager',
+      region_name=region_name
+  )
+
+  try:
+      get_secret_value_response = client.get_secret_value(
+          SecretId=secret_name
+      )
+  except ClientError as e:
+      # For a list of exceptions thrown, see
+      # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+      raise e
+
+  secret = ast.literal_eval(get_secret_value_response['SecretString'])
+  pk = secret[secret_name]
+  if pk[:2] != '0x':
+    pk = '0x' + pk
+  return pk
+
+def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side,myBestOrder):
+  qtyFilled = 0
+  qtyAvailable = 0
+  try:
+    if side == 0:
+      for order in book:
+        if order[0] < executePrice and order[0] < myBestOrder['price']:
+          qtyFilled = qtyFilled + order[1]
+        else:
+          break
+      for order in bybitBook:
+        if order[0] > marketPrice * (1 - settings['maxSlippage']):
+          qtyAvailable = qtyAvailable + order[1]
+        else:
+          break
+    if side == 1:
+      for order in book:
+        if order[0] > executePrice and order[0] > myBestOrder['price']:
+          qtyFilled = qtyFilled + order[1]
+        else:
+          break
+      for order in bybitBook:
+        if order[0] < marketPrice * (1 + settings['maxSlippage']):
+          qtyAvailable = qtyAvailable + order[1]
+        else:
+          break
+    if qtyFilled > qtyAvailable:
+      qtyFilled = qtyAvailable
+    print(qtyFilled,qtyAvailable)
+    return qtyFilled
+  except Exception as error:
+    print('failed getTakerFill:', error)
+    return 0

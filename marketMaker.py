@@ -1,6 +1,6 @@
-import sys, os, asyncio, time, ast
-import tools, contracts, orders, portfolio
-from dotenv import load_dotenv, dotenv_values
+import sys, os, asyncio, time, ast, aiohttp
+import settings, tools, contracts, orders, price_feeds
+from dotenv import dotenv_values
 from decimal import *
 from hexbytes import HexBytes
 import price_feeds
@@ -13,7 +13,7 @@ config = {
 pairObj = None
 activeOrders = []
 market = sys.argv[1]
-settings = ast.literal_eval(config[market])
+settings = settings.settings[market]
 base = tools.getSymbolFromName(market,0)
 quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
@@ -21,102 +21,114 @@ pairByte32 = HexBytes(pairStr.encode('utf-8'))
 
 async def start():
   global pairObj
+        
   pairObj = await tools.getPairObj(pairStr,config["apiUrl"]);
   if (pairObj is None):
     print("failed to get pairObj")
     return
+  # print(pairObj)
+  async with aiohttp.ClientSession() as s:
+    tasks = []
+    tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s),contracts.getDeployments("PortfolioSubHelper",s)]
+    res = await asyncio.gather(*tasks)
+  await aiohttp.ClientSession().close()
     
-  await asyncio.gather(
-    contracts.getDeployments("TradePairs"),
-    contracts.getDeployments("Portfolio"),
-    contracts.getDeployments("OrderBooks"),
-  )
-  await contracts.initializeProviders(market)
-  await contracts.initializeContracts(market,pairStr)
+    
+  await contracts.initializeProviders(market,settings)
+  await contracts.initializeContracts(market,pairObj)
+  contracts.getRates(pairObj,pairByte32)
   await contracts.refreshDexalotNonce()
-  await price_feeds.startPriceFeed(market)
-  await contracts.startBlockFilter()
   await orders.cancelAllOrders(pairStr)
-  await orderUpdater()
+  await asyncio.sleep(4)
+  
+  contracts.getBalances(base,quote,pairObj)
+  orders.getBestOrders()
+  await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater(base,quote))
+  contracts.status = False
+  await asyncio.sleep(2)
 
-async def orderUpdater():
+async def orderUpdater(base,quote):
   levels = []
   lastUpdatePrice = 0
+  lastUpdateTime = 0
+  failedCount = 0
+  strikes = 0
+  count = 0
   for i in settings['levels']:
     level = i
     level['lastUpdatePrice'] = 0
     if level['refreshTolerance'] is None:
       level['refreshTolerance'] = settings['refreshTolerance']
     levels.append(level)
-  attempts = 0
   global activeOrders
   
   while contracts.status:
-    marketPrice = price_feeds.getMarketPrice()
-    if marketPrice == 0:
+    marketPrice = price_feeds.marketPrice
+    if marketPrice == 0 or contracts.bestAsk is None or contracts.bestBid is None:
       print("waiting for market data")
       await asyncio.sleep(2)
       continue
+    if len(contracts.orderIDsToCancel) > 0:
+      await orders.cancelOrderList(contracts.orderIDsToCancel)
+      await asyncio.sleep(3)
+      contracts.orderIDsToCancel = []
+    if contracts.refreshActiveOrders:
+      await orders.getOpenOrders(pairStr,True)
+      contracts.refreshActiveOrders = False
+      await asyncio.sleep(3)
+      continue
+    if contracts.refreshBalances:
+      contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
     for level in levels:
-      if abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate:
+      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
         levelsToUpdate = int(level['level'])
-    if levelsToUpdate > 0:
-      if len(contracts.pendingTransactions) > 0 and attempts < settings["refreshInterval"]:
-        attempts = attempts + 1
-        await asyncio.sleep(1)
+    taker = False
+    if(settings['takerEnabled']):
+      taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
+    if levelsToUpdate > 0 or taker:
+      if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
+        print('waiting on pending transactions')
+        await asyncio.sleep(0.2)
+        continue
+      elif time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
+        await orders.getOpenOrders(pairStr,True)
+        await asyncio.sleep(4)
+        contracts.pendingTransactions = []
         continue
       else:
-        print("New market price:", marketPrice)
-        attempts = 0
-        contracts.pendingTransactions = []
-        print("\n")
-
-      try:
-        success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
-        if not success:
-          continue
-      except Exception as error:
-        print("error in cancelOrderLevels", error)
-        continue
-      try: 
-        await asyncio.gather(
-          portfolio.getBalances(base, quote),
-          orders.getBestOrders()
-        )
-      except Exception as error:
-        print("error in getBalances and getBestOrders calls", error)
-        continue
-      
-      priceChange = 0
-      if lastUpdatePrice != 0:
-        priceChange = (abs(lastUpdatePrice - marketPrice)/lastUpdatePrice)*100
-      
-      baseFunds = float(contracts.contracts[base]["portfolioTot"])
-      quoteFunds = float(contracts.contracts[quote]["portfolioTot"])
-      totalFunds = baseFunds * marketPrice + quoteFunds
-      
-      
-      buyOrders = orders.generateBuyOrders(marketPrice,priceChange,settings,quoteFunds,totalFunds, pairObj, levelsToUpdate)
-      sellOrders = orders.generateSellOrders(marketPrice,priceChange,settings,baseFunds,totalFunds, pairObj, levelsToUpdate)
-      
-      limit_orders = []
-      limit_orders = buyOrders + sellOrders
-      
-      if len(limit_orders) > 0:
-        try:
-          results = await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
-          if not results:
-            continue
+        print("New market price:", marketPrice, "volatility spread:",price_feeds.volSpread, time.time())
+        print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
+      if (settings['useCancelReplace']):
+        count = count+1
+        print('Replace orders count:',count, 'time:',time.time())
+        for order in contracts.activeOrders:
+          if order['status'] == 'CANCELED':
+            contracts.activeOrders.remove(order)
+        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice)
+        if success:
+          strikes = 0
+          failedCount = 0
+          lastUpdateTime = time.time()
           lastUpdatePrice = marketPrice
           for level in levels:
-            if (int(level['level']) <= levelsToUpdate):
-              level['lastUpdatePrice'] = marketPrice
+            if level['level'] <= levelsToUpdate:
+              level['lastUpdatePrice'] = lastUpdatePrice
+          print("\n")
           continue
-        except Exception as error:
-          print("failed to place orders",error)
+        else:
+          failedCount = failedCount + 1
+          if failedCount > 3:
+            print('3 failed transactions. Cancel all orders...')
+            strikes = strikes + 1
+            if strikes == 3:
+              contracts.status = False
+              break
+            await orders.cancelAllOrders(pairStr)
+            await asyncio.sleep(2)
+          contracts.refreshBalances = True
+          contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
-          continue
-      else:
-        print("no orders to place")
+          print("\n")
+          continue 
     await asyncio.sleep(1)
