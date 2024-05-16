@@ -84,13 +84,6 @@ def getBestOrders():
     print("error in getBestOrders:", error)
   print("finished getting best orders:",time.time())
   return
-  # if (this.tradePairIdentifier=="sAVAX/AVAX" || this.tradePairIdentifier=="COQ/AVAX"){
-  #   this.currentBestBid = currentBestBid.div("1000000000000000000").toNumber()
-  #   this.currentBestAsk = currentBestAsk.div("1000000000000000000").toNumber()
-  # } else {
-  #   this.currentBestBid = currentBestBid.div(1000000).toNumber()
-  #   this.currentBestAsk = currentBestAsk.div(1000000).toNumber()
-  # }
 
   return [currentBestBid,currentBestAsk];
 
@@ -369,13 +362,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         for activeOrder in activeOrders:
           if activeOrder['clientOrderID'] == orderToCancel['clientOrderID']:
             activeOrders.remove(activeOrder)
-    # if len(matches) > 1:
-    #   sortedMatches = sorted(matches, key = lambda d: d['timestamp'])
-    #   matches = sortedMatches[-1]
-    # if len(matches) == 0:
-    #   newOrders.append(newOrder)
-    # elif len(matches) == 1:
-    #   replaceOrders = replaceOrders + matches
   if len(orderIDsToCancel) > 0:
     print("ORDERS TO CANCEL:", orderIDsToCancel)
     await cancelOrderList(orderIDsToCancel)
@@ -419,7 +405,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   return True
 
 async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
-  # print('replace orders:',time.time(), 'orders:', sortedOrders)
   
   updateIDs = []
   clientOrderIDs = []

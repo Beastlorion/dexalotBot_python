@@ -135,6 +135,7 @@ async def getVolSpread(base,quote):
       await asyncio.sleep(1)
       
 async def bybitFeed (base,quote,useBybitPrice):
+  print('starting bybit websockets')
   ws = WebSocket(
     testnet=False,
     channel_type="spot",
@@ -167,7 +168,7 @@ async def bybitFeed (base,quote,useBybitPrice):
             marketPrice = (bybitBids[0][0] + bybitAsks[0][0])/2
     except Exception as error:
       print('error in handle_orderbook bybit:',error)
-        
-  await asyncio.to_thread(ws.orderbook_stream,50, base+quote, handle_orderbook)
+      
+  ws.orderbook_stream(50, base+quote, handle_orderbook)
   
   

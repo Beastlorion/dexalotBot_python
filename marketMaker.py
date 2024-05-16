@@ -128,50 +128,5 @@ async def orderUpdater(base,quote):
           contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
           print("\n")
-          continue
-      else:
-        try:
-          success = await orders.cancelOrderLevels(pairStr, levelsToUpdate)
-          if not success:
-            continue
-        except Exception as error:
-          print("error in cancelOrderLevels", error)
-          continue
-        try: 
-          await asyncio.gather(
-            contracts.getBalances(base, quote,pairObj),
-            orders.getBestOrders()
-          )
-        except Exception as error:
-          print("error in getBalances and getBestOrders calls", error)
-          continue
-        
-        totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
-        totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
-        availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
-        availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
-        totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
-        
-        
-        buyOrders = orders.generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds, pairObj, levelsToUpdate, availQuoteFunds)
-        sellOrders = orders.generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds, pairObj, levelsToUpdate, availBaseFunds)
-        
-        limit_orders = buyOrders + sellOrders
-        
-        if len(limit_orders) > 0:
-          try:
-            results = await orders.addLimitOrderList(limit_orders, pairObj, pairByte32)
-            if not results:
-              continue
-            lastUpdatePrice = marketPrice
-            for level in levels:
-              if (int(level['level']) <= levelsToUpdate):
-                level['lastUpdatePrice'] = marketPrice
-            continue
-          except Exception as error:
-            print("failed to place orders",error)
-            await contracts.refreshDexalotNonce()
-            continue
-        else:
-          print("no orders to place")
+          continue 
     await asyncio.sleep(1)
