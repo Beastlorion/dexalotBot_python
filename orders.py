@@ -219,6 +219,35 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
+# def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds):
+#   bestBid = contracts.bestBid
+#   if bestBid == myBestBid:
+#     return False
+#   spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
+#   price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
+  
+#   if price < bestBid:
+#     qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+#     if price <= myBestBid:
+#       price = math.ceil(price * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
+#     gas = 700000
+#     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
+#       contracts.address,
+#       HexBytes(str(shortuuid.uuid()).encode('utf-8'),
+#       pairByte32,
+#       clientOrderIDs,
+#       Web3.to_wei(price, shiftPrice),
+#       Web3.to_wei(qty, shiftQty),
+#       1,
+#       2
+#     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+#     contracts.incrementNonce()
+#     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+#   else:
+#     return False
+  
+    
+
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice):
   global totalQtyFilled,totalQtyFilled2,totalQtyFilled3,totalQtyFilled4,totalQtyFilled5,totalQtyFilledLastUpdate,totalQtyFilled2LastUpdate,totalQtyFilled3LastUpdate,totalQtyFilled4LastUpdate,totalQtyFilled5LastUpdate
   replaceOrders = []
@@ -230,6 +259,21 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   contracts.retrigger = False
   bids = []
   asks = []
+  quoteDecimals = pairObj["quote_evmdecimals"]
+  shiftPrice = 'ether'
+  match quoteDecimals:
+    case 6:
+      shiftPrice = "lovelace"
+    case 8:
+      shiftPrice = "8_dec"
+  baseDecimals = pairObj["base_evmdecimals"]
+  shiftQty = 'ether'
+  match baseDecimals:
+    case 6:
+      shiftQty = "lovelace"
+    case 8:
+      shiftQty = "8_dec"
+      
   for order in contracts.activeOrders:
     if order['side'] == 0:
       bids.append(order)
@@ -313,9 +357,18 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
   # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
   # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
-  availBaseFunds = totalBaseFunds * .999
-  availQuoteFunds = totalQuoteFunds * .999
-  
+  if settings['takerEnabled']:
+    availBaseFunds = totalBaseFunds * .999 * (1 - settings['takerReserve'])
+    availQuoteFunds = totalQuoteFunds * .999 * (1 - settings['takerReserve'])
+    availTakerBaseFunds = totalBaseFunds * .999 * (settings['takerReserve'])
+    availTakerQuoteFunds = totalQuoteFunds * .999 * (settings['takerReserve'])
+  else:
+    availBaseFunds = totalBaseFunds * .999
+    availQuoteFunds = totalQuoteFunds * .999
+
+  # if settings['takerEnabled'] and taker:
+  #   executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds)
+    
   for order in contracts.activeOrders:
     if order['side'] == 0:
       availQuoteFunds = availQuoteFunds - order['qtyLeft'] * order['price']
@@ -365,21 +418,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   if len(orderIDsToCancel) > 0:
     print("ORDERS TO CANCEL:", orderIDsToCancel)
     await cancelOrderList(orderIDsToCancel)
-  
-  quoteDecimals = pairObj["quote_evmdecimals"]
-  shiftPrice = 'ether'
-  match quoteDecimals:
-    case 6:
-      shiftPrice = "lovelace"
-    case 8:
-      shiftPrice = "8_dec"
-  baseDecimals = pairObj["base_evmdecimals"]
-  shiftQty = 'ether'
-  match baseDecimals:
-    case 6:
-      shiftQty = "lovelace"
-    case 8:
-      shiftQty = "8_dec"
         
   replaceTx = False
   if len(replaceOrders) > 0:

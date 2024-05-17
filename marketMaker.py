@@ -62,7 +62,7 @@ async def orderUpdater(base,quote):
     levels.append(level)
   global activeOrders
   
-  while contracts.status:
+  while contracts.status and (time.time() - price_feeds.lastUpdate < 30 or price_feeds.lastUpdate == 0):
     marketPrice = price_feeds.marketPrice
     if marketPrice == 0 or contracts.bestAsk is None or contracts.bestBid is None:
       print("waiting for market data")
@@ -87,18 +87,8 @@ async def orderUpdater(base,quote):
     if(settings['takerEnabled']):
       taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or taker:
-      if time.time() - lastUpdateTime < 5 and len(contracts.pendingTransactions) > 0:
-        print('waiting on pending transactions')
-        await asyncio.sleep(0.2)
-        continue
-      elif time.time() - lastUpdateTime > 5 and len(contracts.pendingTransactions) > 0:
-        await orders.getOpenOrders(pairStr,True)
-        await asyncio.sleep(4)
-        contracts.pendingTransactions = []
-        continue
-      else:
-        print("New market price:", marketPrice, "volatility spread:",price_feeds.volSpread, time.time())
-        print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
+      print("New market price:", marketPrice, "volatility spread:",price_feeds.volSpread, time.time())
+      print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
       if (settings['useCancelReplace']):
         count = count+1
         print('Replace orders count:',count, 'time:',time.time())
@@ -126,9 +116,11 @@ async def orderUpdater(base,quote):
               break
             await orders.cancelAllOrders(pairStr)
             await asyncio.sleep(2)
+          contracts.pendingTransactions = []
           contracts.refreshBalances = True
           contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
           print("\n")
           continue 
     await asyncio.sleep(1)
+  contracts.status = False
