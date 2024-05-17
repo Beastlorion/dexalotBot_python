@@ -22,9 +22,7 @@ async def startPriceFeed(market,settings):
     asyncio.create_task(getVolSpread(base,quote))
   if settings['useCustomPrice']:
     asyncio.create_task(getCustomPrice(base,quote))
-  elif (settings['useBybitPrice']):
-    asyncio.create_task(bybitFeed(base, quote))
-  else:
+  elif not settings['useBybitPrice']:
     client = await AsyncClient.create()
     bm = BinanceSocketManager(client)
     if quote == "USDC" and base != "EUROC" and base != "USDT":
@@ -36,7 +34,8 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
-
+  if settings['useBybitPrice'] or settings['takerEnabled']:
+    asyncio.create_task(bybitFeed(base, quote))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
