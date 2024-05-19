@@ -248,7 +248,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     if bestBid == myBestBid:
       return False
     spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
-    price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
+    price = math.ceil(marketPrice * (1 + spread + settings['takerThreshold']/100)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
     
     if price < bestBid:
       qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
