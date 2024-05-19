@@ -223,7 +223,7 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
       qty = math.floor(availQuoteFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
-      gas = 700000
+      gas = 1250000
       print('Execute Taker Buy - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
         contracts.address,
@@ -254,7 +254,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
       qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       if price <= myBestBid:
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
-      gas = 700000
+      gas = 1250000
       print('Execute Taker Sell - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
         contracts.address,
