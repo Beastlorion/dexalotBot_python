@@ -278,9 +278,9 @@ async def handleWebscokets(pairObj):
               if (data['status'] in ['PARTIAL']):
                 refreshBalances = True
                 if data['type2Id'] == 2:
-                  takerFilled = takerFilled + data['quantityfilled']
+                  takerFilled = takerFilled + float(data['quantityfilled'])
                 if data['type2Id'] == 3:
-                  makerFilled = makerFilled + data['quantityfilled']
+                  makerFilled = makerFilled + float(data['quantityfilled'])
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                       print("PARTIAL FILL:",data)
