@@ -221,9 +221,9 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
     
     if price > bestAsk:
       qty = math.floor((availQuoteFunds/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-      if qty > float(pairObj["maxtrade_amnt"]) :
+      if qty * price > float(pairObj["maxtrade_amnt"]) :
         qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-      elif qty < float(pairObj["mintrade_amnt"])/price:
+      elif qty * price < float(pairObj["mintrade_amnt"])/price:
         return False
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
@@ -256,9 +256,9 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     
     if price < bestBid:
       qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-      if qty > float(pairObj["maxtrade_amnt"]) :
+      if qty * price > float(pairObj["maxtrade_amnt"]) :
         qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-      elif qty < float(pairObj["mintrade_amnt"]):
+      elif qty * price < float(pairObj["mintrade_amnt"]):
         return False
       if price <= myBestBid:
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
