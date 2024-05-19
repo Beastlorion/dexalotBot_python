@@ -375,7 +375,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     skip = False
     for oldOrder in ordersToUpdate:
       if newOrder['side'] == oldOrder['side'] and newOrder['level'] == oldOrder['level']:
-        if newOrder['price'] == oldOrder['price'] and newOrder['qty'] == oldOrder['qty']:
+        if newOrder['price'] == oldOrder['price']: #and newOrder['qty'] == oldOrder['qty']:
           skip = True
           break
         newOrder['orderID'] = oldOrder['orderID']
