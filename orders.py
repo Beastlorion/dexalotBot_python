@@ -199,7 +199,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
           price = math.ceil((bestBid * pow(10,pairObj["quotedisplaydecimals"])) + 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-        if qty * marketPrice < float(pairObj["mintrade_amnt"]):
+        if qty * marketPrice < float(pairObj["mintrade_amnt"])/price:
           continue
         if qty > float(pairObj["maxtrade_amnt"]) :
           qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
@@ -220,7 +220,11 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
     price = math.floor(marketPrice * (1 - spread - settings['takerThreshold']/100) * pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
     
     if price > bestAsk:
-      qty = math.floor(availQuoteFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      qty = math.floor((availQuoteFunds/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      if qty > float(pairObj["maxtrade_amnt"]) :
+        qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      elif qty < float(pairObj["mintrade_amnt"])/price:
+        return False
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 1250000
@@ -252,6 +256,10 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     
     if price < bestBid:
       qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      if qty > float(pairObj["maxtrade_amnt"]) :
+        qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      elif qty < float(pairObj["mintrade_amnt"]):
+        return False
       if price <= myBestBid:
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 1250000
@@ -328,7 +336,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
       totalQtyFilledTest = totalQtyFilledTest + qtyFilled
       totalQtyFilledLastUpdate = time.time()
-  print('totalQtyFilledTest',totalQtyFilledTest)
+    print('totalQtyFilledTest',totalQtyFilledTest)
   
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
@@ -336,10 +344,10 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
   # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
   if settings['takerEnabled']:
-    availBaseFunds = totalBaseFunds * .999 * (1 - settings['takerReserve'])
-    availQuoteFunds = totalQuoteFunds * .999 * (1 - settings['takerReserve'])
-    availTakerBaseFunds = totalBaseFunds * .999 * (settings['takerReserve'])
-    availTakerQuoteFunds = totalQuoteFunds * .999 * (settings['takerReserve'])
+    availBaseFunds = totalBaseFunds * .999 * (1 - settings['takerReserve']/100)
+    availQuoteFunds = totalQuoteFunds * .999 * (1 - settings['takerReserve']/100)
+    availTakerBaseFunds = totalBaseFunds * .999 * (settings['takerReserve']/100)
+    availTakerQuoteFunds = totalQuoteFunds * .999 * (settings['takerReserve']/100)
   else:
     availBaseFunds = totalBaseFunds * .999
     availQuoteFunds = totalQuoteFunds * .999
