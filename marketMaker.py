@@ -123,8 +123,10 @@ async def orderUpdater(base,quote):
             await orders.cancelAllOrders(pairStr)
             await asyncio.sleep(2)
           contracts.pendingTransactions = []
+          await orders.cancelAllOrders(pairStr)
+          await asyncio.sleep(4)
           contracts.refreshBalances = True
-          contracts.refreshActiveOrders = True
+          # contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
           print("\n")
           continue 

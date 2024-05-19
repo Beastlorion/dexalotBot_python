@@ -366,7 +366,6 @@ async def handleWebscokets(pairObj):
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        refreshActiveOrders = True
     except Exception as error:
       print('error during handleWebscokets:',error)
       
