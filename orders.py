@@ -18,16 +18,8 @@ units.update(
     }
 )
 openOrders = None
-totalQtyFilled = 0
-totalQtyFilled2 = 0
-totalQtyFilled3 = 0
-totalQtyFilled4 = 0
-totalQtyFilled5 = 0
+totalQtyFilledTest = 0
 totalQtyFilledLastUpdate = 0
-totalQtyFilled2LastUpdate = 0
-totalQtyFilled3LastUpdate = 0
-totalQtyFilled4LastUpdate = 0
-totalQtyFilled5LastUpdate = 0
 
 failedReplaceAttempts = 0
 
@@ -219,37 +211,72 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
-# def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds):
-#   bestBid = contracts.bestBid
-#   if bestBid == myBestBid:
-#     return False
-#   spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
-#   price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
-  
-#   if price < bestBid:
-#     qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-#     if price <= myBestBid:
-#       price = math.ceil(price * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
-#     gas = 700000
-#     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
-#       contracts.address,
-#       HexBytes(str(shortuuid.uuid()).encode('utf-8'),
-#       pairByte32,
-#       clientOrderIDs,
-#       Web3.to_wei(price, shiftPrice),
-#       Web3.to_wei(qty, shiftQty),
-#       1,
-#       2
-#     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
-#     contracts.incrementNonce()
-#     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
-#   else:
-#     return False
+async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestAsk,availQuoteFunds):
+  try:
+    bestAsk = contracts.bestAsk
+    if bestAsk == myBestAsk:
+      return False
+    spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,{'level':0},0)
+    price = math.floor(marketPrice * (1 - spread - settings['takerThreshold']/100) * pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
+    
+    if price > bestAsk:
+      qty = math.floor(availQuoteFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      if price >= myBestAsk:
+        price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
+      gas = 700000
+      print('Execute Taker Buy - Price:',price,'Qty:',qty)
+      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
+        contracts.address,
+        str(shortuuid.uuid()).encode('utf-8'),
+        pairByte32,
+        Web3.to_wei(price, shiftPrice),
+        Web3.to_wei(qty, shiftQty),
+        0,
+        1,
+        2
+      ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+      contracts.incrementNonce()
+      await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    else:
+      return False
+  except Exception as error:
+    print("Error in executeTakerBuy:",error)
+    
+async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availBaseFunds):
+  try:
+    bestBid = contracts.bestBid
+    if bestBid == myBestBid:
+      return False
+    spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
+    price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
+    
+    if price < bestBid:
+      qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+      if price <= myBestBid:
+        price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
+      gas = 700000
+      print('Execute Taker Sell - Price:',price,'Qty:',qty)
+      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
+        contracts.address,
+        str(shortuuid.uuid()).encode('utf-8'),
+        pairByte32,
+        Web3.to_wei(price, shiftPrice),
+        Web3.to_wei(qty, shiftQty),
+        1,
+        1,
+        2
+      ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+      contracts.incrementNonce()
+      await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    else:
+      return False
+  except Exception as error:
+    print("Error in executeTakerSell:",error)
   
     
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice):
-  global totalQtyFilled,totalQtyFilled2,totalQtyFilled3,totalQtyFilled4,totalQtyFilled5,totalQtyFilledLastUpdate,totalQtyFilled2LastUpdate,totalQtyFilled3LastUpdate,totalQtyFilled4LastUpdate,totalQtyFilled5LastUpdate
+async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
+  global totalQtyFilledTest,totalQtyFilledLastUpdate
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
@@ -282,75 +309,26 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   sortedBids = sorted(bids, key = lambda d: d['price'], reverse = True)
   sortedAsks = sorted(asks, key = lambda d: d['price'])
   if len(sortedBids) > 0: 
-    myBestBid = sortedBids[0]
+    myBestBid = sortedBids[0]['price']
   else:
     myBestBid = 0
   if len(sortedAsks) > 0: 
-    myBestAsk = sortedAsks[0]
+    myBestAsk = sortedAsks[0]['price']
   else:
     myBestAsk = marketPrice*2
-  if taker:
-    print("try taker")
-    qtyFilled = 0
+    
+  if settings['takerTestMode'] and (takerBuy or takerSell):
+    qtyTestFilled = 0
     if (time.time() - totalQtyFilledLastUpdate > 60):
-      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
-        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100)
+      if marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
+        executePrice = marketPrice * (1 - settings['takerThreshold']/100)
         qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid:
-        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100)
+      elif marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid:
+        executePrice = marketPrice * (1 + settings['takerThreshold']/100)
         qtyFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-      totalQtyFilled = totalQtyFilled + qtyFilled
+      totalQtyFilledTest = totalQtyFilledTest + qtyFilled
       totalQtyFilledLastUpdate = time.time()
-    
-    if (time.time() - totalQtyFilled2LastUpdate > 60):
-      qtyFilled2 = 0
-      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100) > contracts.bestAsk:
-        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold2']/100)
-        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100) < contracts.bestBid:
-        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold2']/100)
-        qtyFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-      totalQtyFilled2 = totalQtyFilled2 + qtyFilled2
-      totalQtyFilled2LastUpdate = time.time()
-    
-    if (time.time() - totalQtyFilled3LastUpdate > 60):
-      qtyFilled3 = 0
-      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100) > contracts.bestAsk:
-        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold3']/100)
-        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100) < contracts.bestBid:
-        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold3']/100)
-        qtyFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-      totalQtyFilled3 = totalQtyFilled3 + qtyFilled3
-      totalQtyFilled3LastUpdate = time.time()
-    
-    if (time.time() - totalQtyFilled4LastUpdate > 60):
-      qtyFilled4 = 0
-      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold4']/100) > contracts.bestAsk:
-        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold4']/100)
-        qtyFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold4']/100) < contracts.bestBid:
-        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold4']/100)
-        qtyFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-      totalQtyFilled4 = totalQtyFilled4 + qtyFilled4
-      totalQtyFilled4LastUpdate = time.time()
-      
-    if (time.time() - totalQtyFilled5LastUpdate > 60):
-      qtyFilled5 = 0
-      if price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold5']/100) > contracts.bestAsk:
-        executePrice = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold5']/100)
-        qtyFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-      elif price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold5']/100) < contracts.bestBid:
-        executePrice = price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold5']/100)
-        qtyFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-      totalQtyFilled5 = totalQtyFilled5 + qtyFilled5
-      totalQtyFilled5LastUpdate = time.time()
-  
-  print('totalQtyFilled',totalQtyFilled)
-  print('totalQtyFilled2',totalQtyFilled2)
-  print('totalQtyFilled3',totalQtyFilled3)
-  print('totalQtyFilled4',totalQtyFilled4)
-  print('totalQtyFilled5',totalQtyFilled5)
+  print('totalQtyFilledTest',totalQtyFilledTest)
   
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
@@ -366,9 +344,12 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     availBaseFunds = totalBaseFunds * .999
     availQuoteFunds = totalQuoteFunds * .999
 
-  # if settings['takerEnabled'] and taker:
-  #   executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds)
-    
+  if settings['takerEnabled']:
+    if takerSell:
+      await executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds)
+    elif takerBuy:
+      await executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestAsk,availTakerQuoteFunds)
+      
   for order in contracts.activeOrders:
     if order['side'] == 0:
       availQuoteFunds = availQuoteFunds - order['qtyLeft'] * order['price']
@@ -464,7 +445,7 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
       clientOrderIDs,
       prices,
       quantities
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     return
@@ -502,7 +483,7 @@ async def addLimitOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQt
       quantities,
       sides,
       type2s
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
   except Exception as error:

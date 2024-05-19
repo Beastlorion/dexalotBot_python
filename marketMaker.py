@@ -54,6 +54,8 @@ async def orderUpdater(base,quote):
   failedCount = 0
   strikes = 0
   count = 0
+  startTime = time.time()
+  
   for i in settings['levels']:
     level = i
     level['lastUpdatePrice'] = 0
@@ -83,19 +85,23 @@ async def orderUpdater(base,quote):
     for level in levels:
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
         levelsToUpdate = int(level['level'])
-    taker = False
-    if(settings['takerEnabled']):
-      taker = price_feeds.bybitBids[0][0] * (1 - settings['takerThreshold']/100) > contracts.bestAsk or price_feeds.bybitAsks[0][0] * (1 + settings['takerThreshold']/100) < contracts.bestBid
-    if levelsToUpdate > 0 or taker:
-      print("New market price:", marketPrice, "volatility spread:",price_feeds.volSpread, time.time())
+    takerBuy = False
+    takerSell = False
+    if settings['takerEnabled'] or settings['takerTestMode']:
+      takerBuy = marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk
+      takerSell = marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid
+    if levelsToUpdate > 0 or takerBuy or takerSell:
+      print("New market price:", marketPrice, "volatility spread:",round(price_feeds.volSpread,6), 'Run Time:',time.time() - startTime)
       print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
+      print('takerFilled:', contracts.takerFilled)
+      print('makerFilled:', contracts.makerFilled)
       if (settings['useCancelReplace']):
         count = count+1
         print('Replace orders count:',count, 'time:',time.time())
         for order in contracts.activeOrders:
           if order['status'] == 'CANCELED':
             contracts.activeOrders.remove(order)
-        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, taker, lastUpdatePrice)
+        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
         if success:
           strikes = 0
           failedCount = 0

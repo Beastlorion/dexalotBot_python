@@ -50,6 +50,8 @@ quoteShift = 'ether'
 retrigger = False
 refreshActiveOrders = False
 orderIDsToCancel = []
+takerFilled = 0
+makerFilled = 0
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -228,7 +230,7 @@ async def startDataFeeds(pairObj):
 #   return
     
 async def handleWebscokets(pairObj):
-  global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel
+  global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = pairObj['basedisplaydecimals']
@@ -275,6 +277,10 @@ async def handleWebscokets(pairObj):
               clientOrderID = str(a.replace('\x00',''))
               if (data['status'] in ['PARTIAL']):
                 refreshBalances = True
+                if data['type2Id'] == 2:
+                  takerFilled = takerFilled + data['quantityfilled']
+                if data['type2Id'] == 3:
+                  makerFilled = makerFilled + data['quantityfilled']
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                       print("PARTIAL FILL:",data)
@@ -286,8 +292,13 @@ async def handleWebscokets(pairObj):
                       order['side'] = int(data['sideId'])
                       order['status'] = data['status']
               elif data['status'] in ['FILLED','EXPIRED','KILLED']:
-                print("order closed:",data)
+                # print("order closed:",data)
                 refreshBalances = True
+                if (data['status'] == 'FILLED'):
+                  if data['type2Id'] == 2:
+                    takerFilled = takerFilled + float(data['quantityfilled'])
+                  if data['type2Id'] == 3:
+                    makerFilled = makerFilled + float(data['quantityfilled'])
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     print('Order',data['status'],'and removed from activeOrders:',parsed)
@@ -350,7 +361,7 @@ async def handleWebscokets(pairObj):
             break
           except Exception as error:
             if parsed['type'] == "orderStatusUpdateEvent":
-              print("FAILED ORDER TRACKING:", parsed['data'])
+              print("FAILED ORDER TRACKING:", parsed['data'], error)
               status = False
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
