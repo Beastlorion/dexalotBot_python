@@ -419,7 +419,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         return True
       elif (contracts.replaceStatus == 2 and replaceTx) or (contracts.addStatus == 2 and addTx):
         return False
-      await asyncio.sleep(0.05)
+      await asyncio.sleep(0.1)
     return False
   else:
     await asyncio.sleep(1)
