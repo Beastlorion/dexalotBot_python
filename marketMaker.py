@@ -119,9 +119,6 @@ async def orderUpdater(base,quote):
             strikes = strikes + 1
             if strikes == 3:
               contracts.status = False
-              break
-            await orders.cancelAllOrders(pairStr)
-            await asyncio.sleep(2)
           contracts.pendingTransactions = []
           await orders.cancelAllOrders(pairStr)
           await asyncio.sleep(4)
