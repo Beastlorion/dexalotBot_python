@@ -114,14 +114,11 @@ async def orderUpdater(base,quote):
           continue
         else:
           failedCount = failedCount + 1
-          if failedCount > 3:
-            print('3 failed transactions. Cancel all orders...')
-            strikes = strikes + 1
-            if strikes == 3:
-              contracts.status = False
+          if failedCount > 5:
+            print('5 failed transactions. Cancel all orders...')
+            contracts.status = False
           contracts.pendingTransactions = []
           await orders.cancelAllOrders(pairStr)
-          await asyncio.sleep(4)
           contracts.refreshBalances = True
           # contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()

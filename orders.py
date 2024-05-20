@@ -130,28 +130,22 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
-  if shuttingDown:
-    await asyncio.sleep(4)
-    await contracts.refreshDexalotNonce()
-    await asyncio.sleep(1)
-  for i in range(3):
-    openOrders = await getOpenOrders(pairStr)
-    if (len(openOrders["rows"])>0 or len(contracts.activeOrders) == 0) and not shuttingDown:
-      break
-    elif(len(openOrders["rows"]) == len(contracts.activeOrders)):
-      break
-    else:
-      await asyncio.sleep(1)
-  if len(openOrders["rows"]) >= 0:
+  await asyncio.sleep(3)
+  await contracts.refreshDexalotNonce()
+  await asyncio.sleep(1)
+  openOrders = await getOpenOrders(pairStr)
+  i = 0
+  while len(openOrders['rows'])>0 and i < 10:
+    i = i + 1
     orderIDs = []
     for order in openOrders["rows"]:
       orderIDs.append(order["id"])
     await cancelOrderList(orderIDs)
-    if shuttingDown:
-      await asyncio.sleep(2)
-    contracts.activeOrders = []
-  else:
-    print("no open orders to cancel")
+    await asyncio.sleep(4)
+    openOrders = await getOpenOrders(pairStr)
+  if len(openOrders['rows'])>0:
+    contracts.status = False
+  contracts.activeOrders = []
   
 def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds):
   try:
