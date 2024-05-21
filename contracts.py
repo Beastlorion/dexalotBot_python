@@ -291,7 +291,7 @@ async def handleWebscokets(pairObj):
                       order['price'] = float(data['price'])
                       order['side'] = int(data['sideId'])
                       order['status'] = data['status']
-              elif data['status'] in ['FILLED','EXPIRED','KILLED']:
+              if data['status'] in ['FILLED','EXPIRED','KILLED']:
                 # print("order closed:",data)
                 refreshBalances = True
                 if (data['status'] == 'FILLED'):
@@ -303,11 +303,11 @@ async def handleWebscokets(pairObj):
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     print('Order',data['status'],'and removed from activeOrders:',parsed)
                     activeOrders.remove(order)
-              elif (data['status'] in ['NEW','REJECTED','CANCEL_REJECT']):
+              if data['status'] in ['NEW','PARTIAL','REJECTED','CANCEL_REJECT']:
                 for tx in pendingTransactions:
                   if tx['purpose'] in ['addOrderList','replaceOrderList'] :
                     for order in tx['orders']:
-                      if clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] == 'NEW' and not order['tracked']:
+                      if clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['NEW','PARTIAL'] and not order['tracked']:
                         print("NEW ORDER:",clientOrderID)
                         order['orderID'] = data['orderId']
                         order['qty'] = float(data['quantity'])
@@ -342,7 +342,7 @@ async def handleWebscokets(pairObj):
                         addStatus = 1
                       elif (tx['purpose'] == 'replaceOrderList'):
                         replaceStatus = 1
-              elif data['status'] == 'CANCELED':
+              if data['status'] == 'CANCELED':
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']

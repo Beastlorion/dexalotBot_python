@@ -96,31 +96,32 @@ def getTakerFill(settings,marketPrice,executePrice,book,bybitBook,side,myBestOrd
   qtyFilled = 0
   qtyAvailable = 0
   try:
+    # print('try getTakerFill')
     if side == 0:
       for order in book:
-        if order[0] < executePrice and order[0] < myBestOrder['price']:
+        if order[0] < executePrice and order[0] < myBestOrder:
           qtyFilled = qtyFilled + order[1]
         else:
           break
-      for order in bybitBook:
-        if order[0] > marketPrice * (1 - settings['maxSlippage']):
-          qtyAvailable = qtyAvailable + order[1]
-        else:
-          break
+      # for order in bybitBook:
+      #   if order[0] > marketPrice * (1 - settings['maxSlippage']):
+      #     qtyAvailable = qtyAvailable + order[1]
+      #   else:
+      #     break
     if side == 1:
       for order in book:
-        if order[0] > executePrice and order[0] > myBestOrder['price']:
+        if order[0] > executePrice and order[0] > myBestOrder:
           qtyFilled = qtyFilled + order[1]
         else:
           break
-      for order in bybitBook:
-        if order[0] < marketPrice * (1 + settings['maxSlippage']):
-          qtyAvailable = qtyAvailable + order[1]
-        else:
-          break
-    if qtyFilled > qtyAvailable:
-      qtyFilled = qtyAvailable
-    print(qtyFilled,qtyAvailable)
+      # for order in bybitBook:
+      #   if order[0] < marketPrice * (1 + settings['maxSlippage']):
+      #     qtyAvailable = qtyAvailable + order[1]
+      #   else:
+      #     break
+    # if qtyFilled > qtyAvailable:
+    #   qtyFilled = qtyAvailable
+    # print('qtyFilled',qtyFilled)
     return qtyFilled
   except Exception as error:
     print('failed getTakerFill:', error)
