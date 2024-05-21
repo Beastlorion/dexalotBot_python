@@ -382,7 +382,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
         qtyTestFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
         totalQtyFilledLastUpdate5 = time.time()
       totalQtyFilledTest5 = totalQtyFilledTest5 + qtyTestFilled5
-  if settings['takerTestMode']
+  if settings['takerTestMode']:
     print('totalQtyFilledTest',settings['takerThreshold'],totalQtyFilledTest)
     print('totalQtyFilledTest',settings['takerThreshold2'],totalQtyFilledTest2)
     print('totalQtyFilledTest',settings['takerThreshold3'],totalQtyFilledTest3)
