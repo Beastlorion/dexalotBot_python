@@ -148,7 +148,7 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
     for order in openOrders["rows"]:
       orderIDs.append(order["id"])
     await cancelOrderList(orderIDs)
-    await asyncio.sleep(4)
+    await asyncio.sleep(6)
     openOrders = await getOpenOrders(pairStr)
   if len(openOrders['rows'])>0:
     contracts.status = False

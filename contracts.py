@@ -49,6 +49,7 @@ baseShift = 'ether'
 quoteShift = 'ether'
 retrigger = False
 refreshActiveOrders = False
+reconnect = False
 orderIDsToCancel = []
 takerFilled = 0
 makerFilled = 0
@@ -230,7 +231,7 @@ async def startDataFeeds(pairObj):
 #   return
     
 async def handleWebscokets(pairObj):
-  global status, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled
+  global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = pairObj['basedisplaydecimals']
@@ -240,12 +241,13 @@ async def handleWebscokets(pairObj):
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
   while status:
+    reconnect = False
     try:
       async with websockets.connect("wss://api.dexalot.com") as websocket:
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
         print("dexalotOrderFeed and dexalotBookFeed START")
-        while status:
+        while status and not reconnect:
           try:
             message = str(await websocket.recv())
             parsed = json.loads(message)

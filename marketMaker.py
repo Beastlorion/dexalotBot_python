@@ -118,6 +118,7 @@ async def orderUpdater(base,quote):
             print('5 failed transactions. Cancel all orders...')
             contracts.status = False
           contracts.pendingTransactions = []
+          contracts.reconnect = True
           await orders.cancelAllOrders(pairStr)
           contracts.refreshBalances = True
           # contracts.refreshActiveOrders = True
