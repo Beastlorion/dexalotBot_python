@@ -34,7 +34,7 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
-  if settings['useBybitPrice'] or settings['takerEnabled']:
+  if settings['useBybitPrice']:
     asyncio.create_task(bybitFeed(base, quote))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
