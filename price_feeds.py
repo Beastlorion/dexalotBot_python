@@ -28,7 +28,7 @@ async def startPriceFeed(market,settings):
     if quote == "USDC" and base != "EUROC" and base != "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-    elif quote == "USDT":
+    elif quote == "USDT" or quote == "ETH":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
     elif base == "USDT" and quote == "USDC":
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
@@ -46,21 +46,27 @@ async def usdtUpdater():
 
 async def startTicker(client, bm, base, quote):
   global marketPrice, lastUpdate
-  symbol = base + 'USDT'
+  if quote == "USDC":
+    symbol = base + 'USDT'
+  elif base == 'BTC' and quote == 'ETH':
+    symbol = 'ETHBTC'
 
   # start any sockets here, i.e a trade socket
   print("starting ticker:", symbol)
-  ts = bm.trade_socket(symbol)
+  ts = bm.depth_socket(symbol,5,100)
   # then start receiving messages
   async with ts as tscm:
     while contracts.status:
       res = await tscm.recv()
-      priceUsdt = float(res["p"])
+      binancePrice = (float(res["bids"][0][0])+float(res['asks'][0][0]))/2
       if quote == "USDC" and usdcUsdt:
-        marketPrice = priceUsdt / usdcUsdt
+        marketPrice = binancePrice / usdcUsdt
         lastUpdate = time.time()
-      elif (quote == "USDT"):
-        marketPrice = priceUsdt
+      elif symbol == 'ETHBTC':
+        marketPrice = 1/binancePrice
+        lastUpdate = time.time()
+      else:
+        marketPrice = binancePrice
         lastUpdate = time.time()
   await client.close_connection()
   
