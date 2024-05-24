@@ -368,7 +368,7 @@ async def handleWebscokets(pairObj):
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
     except Exception as error:
       print('error during handleWebscokets:',error)
       
