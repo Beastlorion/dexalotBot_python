@@ -246,7 +246,7 @@ async def handleWebscokets(pairObj):
     req = Request(url)
     req.add_header('x-apikey', config['wsKey'])
     token = urlopen(req).read()
-    wsUrl = "wss://api.dexalot.com?wstoken=" + token
+    wsUrl = "wss://api.dexalot.com?wstoken=" + token.decode('utf-8')
   
   while status:
     reconnect = False
