@@ -241,11 +241,11 @@ async def handleWebscokets(pairObj):
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
   wsUrl = "wss://api.dexalot.com"
-  if len(config['wsKey']) > 0:
+  if 'wsKey' in config and len(config['wsKey'])>1:
     url = 'https://api.dexalot.com/privapi/auth/getwstoken'
     req = Request(url)
-    req.add_header('x-apikey', contracts.signature)
-    token = urlopen(req).read(config['wsKey'])
+    req.add_header('x-apikey', config['wsKey'])
+    token = urlopen(req).read()
     wsUrl = "wss://api.dexalot.com?wstoken=" + token
   
   while status:
