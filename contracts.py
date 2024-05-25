@@ -240,10 +240,18 @@ async def handleWebscokets(pairObj):
   tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
+  wsUrl = "wss://api.dexalot.com"
+  if len(config['wsKey']) > 0:
+    url = 'https://api.dexalot.com/privapi/auth/getwstoken'
+    req = Request(url)
+    req.add_header('x-apikey', contracts.signature)
+    token = urlopen(req).read(config['wsKey'])
+    wsUrl = "wss://api.dexalot.com?wstoken=" + token
+  
   while status:
     reconnect = False
     try:
-      async with websockets.connect("wss://api.dexalot.com") as websocket:
+      async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
         print("dexalotOrderFeed and dexalotBookFeed START")
