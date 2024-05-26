@@ -46,6 +46,7 @@ async def usdtUpdater():
 
 async def startTicker(client, bm, base, quote):
   global marketPrice, lastUpdate
+  symbol = base + quote
   if quote == "USDC":
     symbol = base + 'USDT'
   elif base == 'BTC' and quote == 'ETH':
