@@ -83,8 +83,13 @@ async def orderUpdater(base,quote):
       contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
     for level in levels:
-      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate) or (contracts.retrigger and int(level['level']) == 1):
+      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate):
         levelsToUpdate = int(level['level'])
+    if levelsToUpdate == 0 and contracts.retrigger:
+      levelsToUpdate = 1
+    else:
+      contracts.retrigger = False      
+          
     takerBuy = False
     takerSell = False
     if settings['takerEnabled'] or settings['takerTestMode']:
