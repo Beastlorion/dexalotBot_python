@@ -102,7 +102,7 @@ async def orderUpdater(base,quote):
       print('makerFilled:', contracts.makerFilled)
       if (settings['useCancelReplace']):
         count = count+1
-        print('Replace orders count:',count, 'time:',time.time())
+        print('updateOrdersCount:',count, 'cancelReplaceCount:',orders.cancelReplaceCount,'addOrderCount:',orders.addOrderCount,'cancelOrderCount:',orders.cancelOrderCount, 'time:',time.time())
         for order in contracts.activeOrders:
           if order['status'] == 'CANCELED':
             contracts.activeOrders.remove(order)

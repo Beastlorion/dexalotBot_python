@@ -17,6 +17,9 @@ units.update(
         "8_dec": decimal.Decimal("100000000"),  # Add in 8 decimals
     }
 )
+cancelReplaceCount = 0
+addOrderCount = 0
+cancelOrderCount = 0
 openOrders = None
 totalQtyFilledTest = 0
 totalQtyFilledLastUpdate = 0
@@ -88,6 +91,7 @@ def getBestOrders():
 
 
 async def cancelOrderList(orderIDs):
+  global cancelOrderCount
   print("cancel orders:",orderIDs)
   if len(orderIDs) == 0:
     return False
@@ -97,6 +101,7 @@ async def cancelOrderList(orderIDs):
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    cancelOrderCount = cancelOrderCount + len(orderIDs)
   except Exception as error:
     print("error in cancelOrderList", error)
   # print("cancelOrderList response:", response.hex(), round(time.time()))
@@ -285,7 +290,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
-  global totalQtyFilledTest,totalQtyFilledLastUpdate,totalQtyFilledTest2,totalQtyFilledLastUpdate2,totalQtyFilledTest3,totalQtyFilledLastUpdate3,totalQtyFilledTest4,totalQtyFilledLastUpdate4,totalQtyFilledTest5,totalQtyFilledLastUpdate5
+  global cancelReplaceCount, addOrderCount, totalQtyFilledTest,totalQtyFilledLastUpdate,totalQtyFilledTest2,totalQtyFilledLastUpdate2,totalQtyFilledTest3,totalQtyFilledLastUpdate3,totalQtyFilledTest4,totalQtyFilledLastUpdate4,totalQtyFilledTest5,totalQtyFilledLastUpdate5
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
@@ -467,11 +472,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
     asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty))
+    cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
   addTx = False
   if len(newOrders) > 0:
     addTx = True
     asyncio.create_task(addLimitOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty))
+    addOrderCount = addOrderCount + len(newOrders)
   
   if replaceTx or addTx:
     for x in range(100):
