@@ -177,7 +177,7 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
         if qty * price > float(pairObj["maxtrade_amnt"]) :
-          qty = math.floor((float(pairObj["maxtrade_amnt"])-1)*price * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+          qty = math.floor((float(pairObj["maxtrade_amnt"])/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         availableFunds = availableFunds - (qty * price)
         orders.append({'side':0,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
         if retrigger:
@@ -208,7 +208,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         if qty * marketPrice < float(pairObj["mintrade_amnt"])/price:
           continue
         if qty * price > float(pairObj["maxtrade_amnt"]) :
-          qty = math.floor((float(pairObj["maxtrade_amnt"])-1)*price * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+          qty = math.floor((float(pairObj["maxtrade_amnt"])/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         availableFunds = availableFunds - qty
         orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
         if retrigger:
