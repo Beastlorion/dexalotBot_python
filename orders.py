@@ -205,7 +205,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
           price = math.ceil((bestBid * pow(10,pairObj["quotedisplaydecimals"])) + 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
-        if qty * marketPrice < float(pairObj["mintrade_amnt"])/price:
+        if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
         if qty * price > float(pairObj["maxtrade_amnt"]) :
           qty = math.floor((float(pairObj["maxtrade_amnt"])/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
