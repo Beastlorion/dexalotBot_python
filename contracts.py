@@ -379,6 +379,7 @@ async def handleWebscokets(pairObj):
         await asyncio.sleep(0.1)
     except Exception as error:
       print('error during handleWebscokets:',error)
+      await asyncio.sleep(0.25)
       
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
