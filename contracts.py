@@ -249,8 +249,8 @@ async def handleWebscokets(pairObj):
         url = 'https://api.dexalot.com/privapi/auth/getwstoken'
         req = Request(url)
         req.add_header('x-apikey', config['wsKey'])
-        token = urlopen(req).read()
-        wsUrl = "wss://api.dexalot.com?wstoken=" + token.decode('utf-8')
+        token = json.loads(urlopen(req).read())['token']
+        wsUrl = "wss://api.dexalot.com?wstoken=" + token
       async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
@@ -378,8 +378,10 @@ async def handleWebscokets(pairObj):
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
+        await asyncio.sleep(0.05)
     except Exception as error:
       print('error during handleWebscokets:',error)
+      await asyncio.sleep(0.1)
       
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
