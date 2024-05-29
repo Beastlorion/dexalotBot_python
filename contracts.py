@@ -241,16 +241,16 @@ async def handleWebscokets(pairObj):
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
   wsUrl = "wss://api.dexalot.com"
-  if 'wsKey' in config and len(config['wsKey'])>1:
-    url = 'https://api.dexalot.com/privapi/auth/getwstoken'
-    req = Request(url)
-    req.add_header('x-apikey', config['wsKey'])
-    token = urlopen(req).read()
-    wsUrl = "wss://api.dexalot.com?wstoken=" + token.decode('utf-8')
   
   while status:
     reconnect = False
     try:
+      if 'wsKey' in config and len(config['wsKey'])>1:
+        url = 'https://api.dexalot.com/privapi/auth/getwstoken'
+        req = Request(url)
+        req.add_header('x-apikey', config['wsKey'])
+        token = urlopen(req).read()
+        wsUrl = "wss://api.dexalot.com?wstoken=" + token.decode('utf-8')
       async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
@@ -378,10 +378,8 @@ async def handleWebscokets(pairObj):
             continue
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        await asyncio.sleep(0.1)
     except Exception as error:
       print('error during handleWebscokets:',error)
-      await asyncio.sleep(0.25)
       
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
