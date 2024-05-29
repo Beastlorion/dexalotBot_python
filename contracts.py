@@ -287,10 +287,6 @@ async def handleWebscokets(pairObj):
               clientOrderID = str(a.replace('\x00',''))
               if (data['status'] in ['PARTIAL']):
                 refreshBalances = True
-                if data['type2Id'] == 2:
-                  takerFilled = takerFilled + float(data['quantityfilled'])
-                if data['type2Id'] == 3:
-                  makerFilled = makerFilled + float(data['quantityfilled'])
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                       print("PARTIAL FILL:",data)
@@ -356,6 +352,11 @@ async def handleWebscokets(pairObj):
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
                     order['status'] = data['status']
+                    activeOrders.remove(order)
+                  if data['type2Id'] == 2:
+                    takerFilled = takerFilled + float(data['quantityfilled'])
+                  if data['type2Id'] == 3:
+                    makerFilled = makerFilled + float(data['quantityfilled'])
               for tx in pendingTransactions:
                 for order in tx['orders']:
                   if clientOrderID == order["clientOrderID"].decode('utf-8') and not order['tracked']:
