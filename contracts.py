@@ -357,7 +357,6 @@ async def handleWebscokets(pairObj):
                     takerFilled = takerFilled + float(data['quantityfilled'])
                   if data['type2Id'] == 3:
                     makerFilled = makerFilled + float(data['quantityfilled'])
-                refreshBalances = True
               for tx in pendingTransactions:
                 for order in tx['orders']:
                   if clientOrderID == order["clientOrderID"].decode('utf-8') and not order['tracked']:
