@@ -54,6 +54,7 @@ async def orderUpdater(base,quote):
   failedCount = 0
   strikes = 0
   count = 0
+  resetOrders = False
   startTime = time.time()
   
   for i in settings['levels']:
@@ -83,8 +84,9 @@ async def orderUpdater(base,quote):
       contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
     for level in levels:
-      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 and int(level['level']) > levelsToUpdate):
+      if ((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 or resetOrders) and int(level['level']) > levelsToUpdate):
         levelsToUpdate = int(level['level'])
+    resetOrders = False
     if levelsToUpdate == 0 and contracts.retrigger:
       levelsToUpdate = 1
     else:
@@ -122,6 +124,7 @@ async def orderUpdater(base,quote):
           if failedCount > 2:
             contracts.reconnect = True
             await orders.cancelAllOrders(pairStr)
+            resetOrders = True
           if failedCount > 5:
             print('5 failed transactions. Cancel all orders and shutdown')
             await orders.cancelAllOrders(pairStr)
