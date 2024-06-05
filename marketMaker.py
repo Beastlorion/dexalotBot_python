@@ -98,10 +98,10 @@ async def orderUpdater(base,quote):
       takerBuy = marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk
       takerSell = marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or takerBuy or takerSell:
-      print("New market price:", marketPrice, "volatility spread:",round(price_feeds.volSpread,6), 'Run Time:',time.time() - startTime)
+      print("New market price:", marketPrice, "volatility spread:",round(price_feeds.volSpread*100,6), 'Run Time:',time.time() - startTime)
       print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
-      print('takerFilled:', contracts.takerFilled)
-      print('makerFilled:', contracts.makerFilled)
+      # print('takerFilled:', contracts.takerFilled)
+      # print('makerFilled:', contracts.makerFilled)
       if (settings['useCancelReplace']):
         count = count+1
         print('updateOrdersCount:',count, 'cancelReplaceCount:',orders.cancelReplaceCount,'addOrderCount:',orders.addOrderCount,'cancelOrderCount:',orders.cancelOrderCount, 'time:',time.time())
