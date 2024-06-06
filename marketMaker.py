@@ -120,6 +120,7 @@ async def orderUpdater(base,quote):
           print("\n")
           continue
         else:
+          contracts.pendingTransactions = []
           failedCount = failedCount + 1
           if failedCount > 2:
             contracts.reconnect = True
@@ -129,7 +130,6 @@ async def orderUpdater(base,quote):
             print('5 failed transactions. Cancel all orders and shutdown')
             await orders.cancelAllOrders(pairStr)
             contracts.status = False
-          contracts.pendingTransactions = []
           contracts.refreshBalances = True
           # contracts.refreshActiveOrders = True
           await contracts.refreshDexalotNonce()
