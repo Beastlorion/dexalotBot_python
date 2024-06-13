@@ -21,17 +21,6 @@ cancelReplaceCount = 0
 addOrderCount = 0
 cancelOrderCount = 0
 openOrders = None
-totalQtyFilledTest = 0
-totalQtyFilledLastUpdate = 0
-
-totalQtyFilledTest2 = 0
-totalQtyFilledTest3 = 0
-totalQtyFilledTest4 = 0
-totalQtyFilledTest5 = 0
-totalQtyFilledLastUpdate2 = 0
-totalQtyFilledLastUpdate3 = 0
-totalQtyFilledLastUpdate4 = 0
-totalQtyFilledLastUpdate5 = 0
 
 async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
@@ -290,7 +279,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
-  global cancelReplaceCount, addOrderCount, totalQtyFilledTest,totalQtyFilledLastUpdate,totalQtyFilledTest2,totalQtyFilledLastUpdate2,totalQtyFilledTest3,totalQtyFilledLastUpdate3,totalQtyFilledTest4,totalQtyFilledLastUpdate4,totalQtyFilledTest5,totalQtyFilledLastUpdate5
+  global cancelReplaceCount, addOrderCount
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
@@ -334,69 +323,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
   else:
     myBestAsk = marketPrice*2
     
-  if settings['takerTestMode'] and (takerBuy or takerSell):
-    if (time.time() - totalQtyFilledLastUpdate > 60):
-      qtyTestFilled = 0
-      if marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk:
-        executePrice = marketPrice * (1 - settings['takerThreshold']/100)
-        qtyTestFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-        totalQtyFilledLastUpdate = time.time()
-      elif marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid:
-        executePrice = marketPrice * (1 + settings['takerThreshold']/100)
-        qtyTestFilled = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-        totalQtyFilledLastUpdate = time.time()
-      totalQtyFilledTest = totalQtyFilledTest + qtyTestFilled
-    if (time.time() - totalQtyFilledLastUpdate2 > 60):
-      qtyTestFilled2 = 0
-      if marketPrice * (1 - settings['takerThreshold2']/100) > contracts.bestAsk:
-        executePrice = marketPrice * (1 - settings['takerThreshold2']/100)
-        qtyTestFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-        totalQtyFilledLastUpdate2 = time.time()
-      elif marketPrice * (1 + settings['takerThreshold2']/100) < contracts.bestBid:
-        executePrice = marketPrice * (1 + settings['takerThreshold2']/100)
-        qtyTestFilled2 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-        totalQtyFilledLastUpdate2 = time.time()
-      totalQtyFilledTest2 = totalQtyFilledTest2 + qtyTestFilled2
-    if (time.time() - totalQtyFilledLastUpdate3 > 60):
-      qtyTestFilled3 = 0
-      if marketPrice * (1 - settings['takerThreshold3']/100) > contracts.bestAsk:
-        executePrice = marketPrice * (1 - settings['takerThreshold3']/100)
-        qtyTestFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-        totalQtyFilledLastUpdate3 = time.time()
-      elif marketPrice * (1 + settings['takerThreshold3']/100) < contracts.bestBid:
-        executePrice = marketPrice * (1 + settings['takerThreshold3']/100)
-        qtyTestFilled3 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-        totalQtyFilledLastUpdate3 = time.time()
-      totalQtyFilledTest3 = totalQtyFilledTest3 + qtyTestFilled3
-    if (time.time() - totalQtyFilledLastUpdate4 > 60):
-      qtyTestFilled4 = 0
-      if marketPrice * (1 - settings['takerThreshold4']/100) > contracts.bestAsk:
-        executePrice = marketPrice * (1 - settings['takerThreshold4']/100)
-        qtyTestFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-        totalQtyFilledLastUpdate4 = time.time()
-      elif marketPrice * (1 + settings['takerThreshold4']/100) < contracts.bestBid:
-        executePrice = marketPrice * (1 + settings['takerThreshold4']/100)
-        qtyTestFilled4 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-        totalQtyFilledLastUpdate4 = time.time()
-      totalQtyFilledTest4 = totalQtyFilledTest4 + qtyTestFilled4
-    if (time.time() - totalQtyFilledLastUpdate5 > 60):
-      qtyTestFilled5 = 0
-      if marketPrice * (1 - settings['takerThreshold5']/100) > contracts.bestAsk:
-        executePrice = marketPrice * (1 - settings['takerThreshold5']/100)
-        qtyTestFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.asks,price_feeds.bybitBids,0,myBestAsk)
-        totalQtyFilledLastUpdate5 = time.time()
-      elif marketPrice * (1 + settings['takerThreshold5']/100) < contracts.bestBid:
-        executePrice = marketPrice * (1 + settings['takerThreshold5']/100)
-        qtyTestFilled5 = tools.getTakerFill(settings, marketPrice,executePrice,contracts.bids,price_feeds.bybitAsks,1,myBestBid)
-        totalQtyFilledLastUpdate5 = time.time()
-      totalQtyFilledTest5 = totalQtyFilledTest5 + qtyTestFilled5
-  if settings['takerTestMode']:
-    print('totalQtyFilledTest',settings['takerThreshold'],totalQtyFilledTest)
-    print('totalQtyFilledTest',settings['takerThreshold2'],totalQtyFilledTest2)
-    print('totalQtyFilledTest',settings['takerThreshold3'],totalQtyFilledTest3)
-    print('totalQtyFilledTest',settings['takerThreshold4'],totalQtyFilledTest4)
-    print('totalQtyFilledTest',settings['takerThreshold5'],totalQtyFilledTest5)
-  
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds

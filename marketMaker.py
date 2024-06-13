@@ -100,40 +100,36 @@ async def orderUpdater(base,quote):
     if levelsToUpdate > 0 or takerBuy or takerSell:
       print("New market price:", marketPrice, "volatility spread:",round(price_feeds.volSpread*100,6), 'Run Time:',time.time() - startTime)
       print('BEST BID:', contracts.bestBid, "BEST ASK:", contracts.bestAsk)
-      # print('takerFilled:', contracts.takerFilled)
-      # print('makerFilled:', contracts.makerFilled)
-      if (settings['useCancelReplace']):
-        count = count+1
-        print('updateOrdersCount:',count, 'cancelReplaceCount:',orders.cancelReplaceCount,'addOrderCount:',orders.addOrderCount,'cancelOrderCount:',orders.cancelOrderCount, 'time:',time.time())
-        for order in contracts.activeOrders:
-          if order['status'] == 'CANCELED':
-            contracts.activeOrders.remove(order)
-        success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
-        if success:
-          strikes = 0
-          failedCount = 0
-          lastUpdateTime = time.time()
-          lastUpdatePrice = marketPrice
-          for level in levels:
-            if level['level'] <= levelsToUpdate:
-              level['lastUpdatePrice'] = lastUpdatePrice
-          print("\n")
-          continue
-        else:
-          contracts.pendingTransactions = []
-          failedCount = failedCount + 1
-          if failedCount > 2:
-            contracts.reconnect = True
-            await orders.cancelAllOrders(pairStr)
-            resetOrders = True
-          if failedCount > 5:
-            print('5 failed transactions. Cancel all orders and shutdown')
-            await orders.cancelAllOrders(pairStr)
-            contracts.status = False
-          contracts.refreshBalances = True
-          # contracts.refreshActiveOrders = True
-          await contracts.refreshDexalotNonce()
-          print("\n")
-          continue 
+      print('cancelReplaceCount:',orders.cancelReplaceCount,'addOrderCount:',orders.addOrderCount,'cancelOrderCount:',orders.cancelOrderCount, 'time:',time.time())
+      for order in contracts.activeOrders:
+        if order['status'] == 'CANCELED':
+          contracts.activeOrders.remove(order)
+      success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
+      if success:
+        strikes = 0
+        failedCount = 0
+        lastUpdateTime = time.time()
+        lastUpdatePrice = marketPrice
+        for level in levels:
+          if level['level'] <= levelsToUpdate:
+            level['lastUpdatePrice'] = lastUpdatePrice
+        print("\n")
+        continue
+      else:
+        contracts.pendingTransactions = []
+        failedCount = failedCount + 1
+        if failedCount > 2:
+          contracts.reconnect = True
+          await orders.cancelAllOrders(pairStr)
+          resetOrders = True
+        if failedCount > 5:
+          print('5 failed transactions. Cancel all orders and shutdown')
+          await orders.cancelAllOrders(pairStr)
+          contracts.status = False
+        contracts.refreshBalances = True
+        # contracts.refreshActiveOrders = True
+        await contracts.refreshDexalotNonce()
+        print("\n")
+        continue 
     await asyncio.sleep(1)
   contracts.status = False

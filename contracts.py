@@ -211,8 +211,8 @@ def incrementNonce():
 def getRates(pairObj,pairByte32):
   global makerRate, takerRate
   rates = contracts['PortfolioSubHelper']["deployedContract"].functions.getRates(address,address,pairByte32,int(pairObj['maker_rate_bps']),int(pairObj['taker_rate_bps'])).call()
-  makerRate = rates[0]
-  takerRate = rates[1]
+  makerRate = rates[0]/10
+  takerRate = rates[1]/10
   print('Maker Rate BP:',makerRate)
   print('Taker Rate BP:',takerRate)
   
