@@ -1,7 +1,8 @@
 settings = {
   'AVAX_USDC':{
     "secret_name": '', 
-    "secret_location": '', 
+    "secret_location": '',
+    'pairType': 'volatile', 
     "useBybitPrice":False,
     "takerReserve": 5,
     "useVolSpread": False, 
@@ -15,6 +16,7 @@ settings = {
   'AVAX_USDT':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":True,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -27,6 +29,7 @@ settings = {
   'BTC_USDC':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -39,6 +42,7 @@ settings = {
   'ETH_USDC':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -51,6 +55,7 @@ settings = {
   'ETH_USDT':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -63,6 +68,7 @@ settings = {
   'BTC_ETH':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -75,6 +81,7 @@ settings = {
   'ARB_USDC':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -87,6 +94,7 @@ settings = {
   'GMX_USDC':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'volatile',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -99,6 +107,7 @@ settings = {
   'USDT_USDC':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'stable',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,
@@ -111,6 +120,7 @@ settings = {
   'sAVAX_AVAX':{
     "secret_name": '', 
     "secret_location": '', 
+    'pairType': 'stable',
     "useBybitPrice":False,
     "useVolSpread": False, 
     "useCustomPrice": False,

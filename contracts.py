@@ -53,6 +53,7 @@ reconnect = False
 orderIDsToCancel = []
 takerFilled = 0
 makerFilled = 0
+refreshOrderLevel = False
 
 async def getDeployments(dt, s):
   url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
@@ -231,7 +232,7 @@ async def startDataFeeds(pairObj):
 #   return
     
 async def handleWebscokets(pairObj):
-  global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled
+  global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = pairObj['basedisplaydecimals']
@@ -307,6 +308,7 @@ async def handleWebscokets(pairObj):
                     makerFilled = makerFilled + float(data['quantityfilled'])
                 for order in activeOrders:
                   if clientOrderID == order["clientOrderID"].decode('utf-8'):
+                    refreshOrderLevel = True
                     print('Order',data['status'],'and removed from activeOrders:',parsed)
                     activeOrders.remove(order)
               if data['status'] in ['NEW','PARTIAL','REJECTED','CANCEL_REJECT']:

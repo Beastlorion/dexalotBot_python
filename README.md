@@ -36,8 +36,6 @@ export AVAX_USDC_pk=""
 Then type: escape -> :wq -> enter
 to save and exit the editor
 
-If this is your first time using python3 on this machine you may need to install it
-
 ### Install dependencies:
 ```
 pip install web3

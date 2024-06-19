@@ -52,7 +52,6 @@ async def orderUpdater(base,quote):
   lastUpdatePrice = 0
   lastUpdateTime = 0
   failedCount = 0
-  strikes = 0
   count = 0
   resetOrders = False
   startTime = time.time()
@@ -84,17 +83,18 @@ async def orderUpdater(base,quote):
       contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
     for level in levels:
-      if ((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 or resetOrders) and int(level['level']) > levelsToUpdate):
+      if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 or resetOrders or (settings['pairType'] == "stable" and contracts.retrigger)) and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
     resetOrders = False
-    if levelsToUpdate == 0 and contracts.retrigger:
+    if levelsToUpdate == 0 and (contracts.retrigger or contracts.refreshOrderLevel):
       levelsToUpdate = 1
     else:
-      contracts.retrigger = False      
+      contracts.retrigger = False
+    contracts.refreshOrderLevel= False 
           
     takerBuy = False
     takerSell = False
-    if settings['takerEnabled'] or settings['takerTestMode']:
+    if settings['takerEnabled']:
       takerBuy = marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk
       takerSell = marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or takerBuy or takerSell:
@@ -106,7 +106,6 @@ async def orderUpdater(base,quote):
           contracts.activeOrders.remove(order)
       success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
       if success:
-        strikes = 0
         failedCount = 0
         lastUpdateTime = time.time()
         lastUpdatePrice = marketPrice
@@ -118,7 +117,7 @@ async def orderUpdater(base,quote):
       else:
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
-        if failedCount > 2:
+        if failedCount >= 2:
           contracts.reconnect = True
           await orders.cancelAllOrders(pairStr)
           resetOrders = True
