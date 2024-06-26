@@ -1,4 +1,5 @@
 settings = {
+  'responseTime':10,
   'AVAX_USDC':{
     "secret_name": '', 
     "secret_location": '',

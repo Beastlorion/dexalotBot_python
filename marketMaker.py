@@ -14,6 +14,7 @@ pairObj = None
 activeOrders = []
 market = sys.argv[1]
 settings = settings.settings[market]
+responseTime = settings.settings['responseTime']
 base = tools.getSymbolFromName(market,0)
 quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
@@ -104,7 +105,7 @@ async def orderUpdater(base,quote):
       for order in contracts.activeOrders:
         if order['status'] == 'CANCELED':
           contracts.activeOrders.remove(order)
-      success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
+      success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
       if success:
         failedCount = 0
         lastUpdateTime = time.time()

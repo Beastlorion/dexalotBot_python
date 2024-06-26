@@ -278,7 +278,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
   
     
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
+async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
   global cancelReplaceCount, addOrderCount
   replaceOrders = []
   newOrders = []
@@ -407,7 +407,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings, pairObj, pairSt
     addOrderCount = addOrderCount + len(newOrders)
   
   if replaceTx or addTx:
-    for x in range(100):
+    for x in range(responseTime*10):
       if (contracts.replaceStatus == 1 or not replaceTx) and (contracts.addStatus == 1 or not addTx):
         return True
       elif (contracts.replaceStatus == 2 and replaceTx) or (contracts.addStatus == 2 and addTx):
