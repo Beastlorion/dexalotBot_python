@@ -115,6 +115,13 @@ async def orderUpdater(base,quote):
         print("\n")
         continue
       else:
+        orderIDsToCancel = []
+        for tx in contracts.pendingTransactions:
+          if tx['purpose'] == "replaceOrderList":
+            for order in tx['orders']:
+              orderIDsToCancel.append(order['orderID'])
+        if len(orderIDsToCancel) > 0:
+          await orders.cancelOrderList(orderIDsToCancel)
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
         if failedCount >= 2:
