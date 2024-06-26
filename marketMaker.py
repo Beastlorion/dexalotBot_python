@@ -125,9 +125,10 @@ async def orderUpdater(base,quote):
           await orders.cancelOrderList(orderIDsToCancel)
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
-        if failedCount >= 2:
+        if failedCount >= 3:
           contracts.reconnect = True
           await orders.cancelAllOrders(pairStr)
+          await asyncio.sleep(2)
           resetOrders = True
         if failedCount > 5:
           print('5 failed transactions. Cancel all orders and shutdown')
