@@ -54,6 +54,7 @@ async def orderUpdater(base,quote):
   lastUpdateTime = 0
   failedCount = 0
   count = 0
+  lastPriorityGwei = 0
   resetOrders = False
   startTime = time.time()
   
@@ -91,8 +92,10 @@ async def orderUpdater(base,quote):
           newPriorityGwei = round((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice - (float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100)) * 10000 * settings['priorityGwei'])
           if newPriorityGwei > priorityGwei:
             priorityGwei = newPriorityGwei
-          if priorityGwei > 1000:
-            priorityGwei = 1000
+    if failedCount > 0 and priorityGwei < lastPriorityGwei * 2:
+      priorityGwei = lastPriorityGwei * 2
+    if priorityGwei > 1000:
+      priorityGwei = 1000
     if (priorityGwei > 0):
       print("PriorityGwei:", priorityGwei)
     resetOrders = False
@@ -117,6 +120,7 @@ async def orderUpdater(base,quote):
       success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell, priorityGwei)
       if success:
         failedCount = 0
+        lastPriorityGwei = 0
         lastUpdateTime = time.time()
         lastUpdatePrice = marketPrice
         for level in levels:
@@ -125,6 +129,7 @@ async def orderUpdater(base,quote):
         print("\n")
         continue
       else:
+        lastPriorityGwei = priorityGwei
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
         if failedCount >= 3:
