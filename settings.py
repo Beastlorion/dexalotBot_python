@@ -11,7 +11,9 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
-    "levels":[{"level":1,"spread":0.08,"qty":100,"refreshTolerance":0.09},
+    "priorityGweiThreshold":0.02,
+    "priorityGwei": 1,
+    "levels":[{"level":1,"spread":0.08,"qty":100,"refreshTolerance":0.01},
               {"level":2,"spread":0.4,"qty":500,"refreshTolerance":0.4}]
     },
   'AVAX_USDT':{
@@ -24,6 +26,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.08,"qty":100,"refreshTolerance":0.09},
               {"level":2,"spread":0.4,"qty":500,"refreshTolerance":0.4}]
     },
@@ -37,6 +41,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.07,"qty":0.05,"refreshTolerance":0.08},
               {"level":2,"spread":0.4,"qty":0.25,"refreshTolerance":0.4}]
     },
@@ -50,6 +56,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.07,"qty":0.3,"refreshTolerance":0.08},
               {"level":2,"spread":0.4,"qty":1.5,"refreshTolerance":0.4}]
     },
@@ -63,6 +71,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.07,"qty":0.3,"refreshTolerance":0.08},
               {"level":2,"spread":0.4,"qty":1.5,"refreshTolerance":0.4}]
     },
@@ -76,6 +86,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.07,"qty":0.05,"refreshTolerance":0.08},
               {"level":2,"spread":0.4,"qty":0.25,"refreshTolerance":0.4}]
     },
@@ -89,6 +101,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.13,"qty":1000,"refreshTolerance":0.2},
               {"level":2,"spread":0.55,"qty":5000,"refreshTolerance":0.6}]
     },
@@ -102,6 +116,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.15,"qty":30,"refreshTolerance":0.2},
               {"level":2,"spread":0.55,"qty":100,"refreshTolerance":0.6}]
     },
@@ -115,8 +131,9 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
-    "levels":[
-      {"level":1,"spread":0.00,"qty":50000,"refreshTolerance":0.015}]
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
+    "levels":[{"level":1,"spread":0.00,"qty":50000,"refreshTolerance":0.015}]
     },
   'sAVAX_AVAX':{
     "secret_name": '', 
@@ -128,7 +145,8 @@ settings = {
     "defensiveSkew":0.01,
     "takerEnabled": False,
     "takerThreshold": 0.5,
-    "levels":[
-      {"level":1,"spread":0.00,"qty":1000,"refreshTolerance":0.02}]
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
+    "levels":[{"level":1,"spread":0.00,"qty":1000,"refreshTolerance":0.02}]
     },
 }

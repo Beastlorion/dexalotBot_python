@@ -79,7 +79,7 @@ def getBestOrders():
   return [currentBestBid,currentBestAsk];
 
 
-async def cancelOrderList(orderIDs):
+async def cancelOrderList(orderIDs, priorityGwei):
   global cancelOrderCount
   print("cancel orders:",orderIDs)
   if len(orderIDs) == 0:
@@ -87,7 +87,7 @@ async def cancelOrderList(orderIDs):
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
     gas = len(orderIDs) * 500000
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas});
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
     cancelOrderCount = cancelOrderCount + len(orderIDs)
@@ -140,7 +140,7 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
     orderIDs = []
     for order in openOrders["rows"]:
       orderIDs.append(order["id"])
-    await cancelOrderList(orderIDs)
+    await cancelOrderList(orderIDs,1)
     await asyncio.sleep(10 + i * 10)
     openOrders = await getOpenOrders(pairStr)
     i = i + 1
@@ -278,7 +278,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
   
     
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell):
+async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell, priorityGwei):
   global cancelReplaceCount, addOrderCount
   replaceOrders = []
   newOrders = []
@@ -391,13 +391,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
             activeOrders.remove(activeOrder)
   if len(orderIDsToCancel) > 0:
     print("ORDERS TO CANCEL:", orderIDsToCancel)
-    await cancelOrderList(orderIDsToCancel)
+    await cancelOrderList(orderIDsToCancel, priorityGwei)
         
   replaceTx = False
   if len(replaceOrders) > 0:
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
-    asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty))
+    asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty,priorityGwei))
     cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
   addTx = False
@@ -418,7 +418,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     await asyncio.sleep(1)
   return True
 
-async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
+async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty, priorityGwei):
   
   updateIDs = []
   clientOrderIDs = []
@@ -440,7 +440,7 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty):
       clientOrderIDs,
       prices,
       quantities
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     return

@@ -72,7 +72,7 @@ async def orderUpdater(base,quote):
       await asyncio.sleep(2)
       continue
     if len(contracts.orderIDsToCancel) > 0:
-      await orders.cancelOrderList(contracts.orderIDsToCancel)
+      await orders.cancelOrderList(contracts.orderIDsToCancel, 1)
       await asyncio.sleep(3)
       contracts.orderIDsToCancel = []
     if contracts.refreshActiveOrders:
@@ -83,9 +83,18 @@ async def orderUpdater(base,quote):
     if contracts.refreshBalances:
       contracts.getBalances(base,quote,pairObj)
     levelsToUpdate = 0
+    priorityGwei = 0
     for level in levels:
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 or resetOrders or (settings['pairType'] == "stable" and contracts.retrigger)) and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
+        if level['level'] == 1 and lastUpdatePrice != 0 and abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100:
+          newPriorityGwei = round((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice - (float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100)) * 10000 * settings['priorityGwei'])
+          if newPriorityGwei > priorityGwei:
+            priorityGwei = newPriorityGwei
+          if priorityGwei > 1000:
+            priorityGwei = 1000
+    if (priorityGwei > 0):
+      print("PriorityGwei:", priorityGwei)
     resetOrders = False
     if levelsToUpdate == 0 and (contracts.retrigger or contracts.refreshOrderLevel):
       levelsToUpdate = 1
@@ -105,7 +114,7 @@ async def orderUpdater(base,quote):
       for order in contracts.activeOrders:
         if order['status'] == 'CANCELED':
           contracts.activeOrders.remove(order)
-      success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell)
+      success = await orders.cancelReplaceOrders(base, quote, marketPrice, settings, responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell, priorityGwei)
       if success:
         failedCount = 0
         lastUpdateTime = time.time()
@@ -116,13 +125,6 @@ async def orderUpdater(base,quote):
         print("\n")
         continue
       else:
-        orderIDsToCancel = []
-        for tx in contracts.pendingTransactions:
-          if tx['purpose'] == "replaceOrderList":
-            for order in tx['orders']:
-              orderIDsToCancel.append(order['orderID'])
-        if len(orderIDsToCancel) > 0:
-          await orders.cancelOrderList(orderIDsToCancel)
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
         if failedCount >= 3:
