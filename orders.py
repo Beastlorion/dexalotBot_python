@@ -87,7 +87,7 @@ async def cancelOrderList(orderIDs, priorityGwei):
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
     gas = len(orderIDs) * 500000
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')});
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
     cancelOrderCount = cancelOrderCount + len(orderIDs)
@@ -440,7 +440,7 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty, priorityGwei):
       clientOrderIDs,
       prices,
       quantities
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     return
