@@ -51,7 +51,7 @@ def getQty(price, side, level, availableFunds,pairObj):
     if level["qty"] < availableFunds/price:
       return level["qty"]
     elif availableFunds > float(pairObj["mintrade_amnt"]):
-      return availableFunds/price - pow(10,-1 *pairObj["quotedisplaydecimals"])
+      return availableFunds/price - pow(10,-1 *pairObj["basedisplaydecimals"])
     else: 
       return 0
   elif side == 1:
@@ -59,7 +59,7 @@ def getQty(price, side, level, availableFunds,pairObj):
     if level["qty"] < availableFunds:
         return level["qty"]
     elif availableFunds * price > float(pairObj["mintrade_amnt"]):
-      return availableFunds - pow(10,-1 *pairObj["quotedisplaydecimals"])
+      return availableFunds - pow(10,-1 *pairObj["basedisplaydecimals"])
     else:
       return 0
   else: 
