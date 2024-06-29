@@ -60,6 +60,20 @@ settings = {
     "priorityGwei": 1,
     "levels":[{"level":1,"spread":0.07,"qty":0.05,"refreshTolerance":0.03}]
     },
+  'WBTC_ETH':{
+    "secret_name": '', 
+    "secret_location": '', 
+    'pairType': 'volatile',
+    "useBybitPrice":False,
+    "useVolSpread": False, 
+    "useCustomPrice": False,
+    "defensiveSkew":0.01,
+    "takerEnabled": False,
+    "takerThreshold": 0.5,
+    "priorityGweiThreshold":0.04,
+    "priorityGwei": 1,
+    "levels":[{"level":1,"spread":0.07,"qty":0.05,"refreshTolerance":0.03}]
+    },
   'ETH_USDC':{
     "secret_name": '', 
     "secret_location": '', 

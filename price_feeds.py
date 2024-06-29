@@ -10,6 +10,7 @@ api_secret = ''
 usdt = 0
 usdcUsdt = 0
 marketPrice = 0
+ethUsdtPrice = 0
 volSpread = 0
 bybitBids = []
 bybitAsks = []
@@ -53,8 +54,6 @@ async def startTicker(client, bm, base, quote):
   symbol = base + quote
   if quote == "USDC":
     symbol = base + 'USDT'
-  elif base == 'BTC' and quote == 'ETH':
-    symbol = 'ETHBTC'
 
   # start any sockets here, i.e a trade socket
   print("starting ticker:", symbol)
@@ -67,10 +66,12 @@ async def startTicker(client, bm, base, quote):
       if quote == "USDC" and usdcUsdt:
         marketPrice = binancePrice / usdcUsdt
         lastUpdate = time.time()
-      elif symbol == 'ETHBTC':
-        marketPrice = 1/binancePrice
+      elif symbol == 'ETHUSDT' and globalBase == "WBTC":
+        ethUsdtPrice = binancePrice
         lastUpdate = time.time()
-      else:
+      elif symbol == 'WBTCUSDT' and ethUsdtPrice:
+        marketPrice = binancePrice / ethUsdtPrice
+      elif symbol != 'WBTCUSDT':
         marketPrice = binancePrice
         lastUpdate = time.time()
   await client.close_connection()
