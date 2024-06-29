@@ -33,6 +33,7 @@ def getIncrement(quoteDisplayDecimals):
     
 def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0
+  offensiveSkew = 0
   levelSpread = 0
   volSpread = price_feeds.volSpread
   if side == 1:
@@ -40,9 +41,12 @@ def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   if (funds < totalFunds/2):
     multiple = ((funds/totalFunds) - .5) * 20 * -1
     defensiveSkew = multiple * settings["defensiveSkew"];
+  if 'offensiveSkew' in settings and (funds > totalFunds/2):
+    multiple = ((funds/totalFunds) - .5) * 20 * -1
+    offensiveSkew = multiple * settings["offensiveSkew"];
   if level["level"] > 0:
     levelSpread = level["spread"]/100
-  spread = defensiveSkew/100 + levelSpread + volSpread/2
+  spread = defensiveSkew/100 + offensiveSkew/100 + levelSpread + volSpread/2
   return spread
 
 def getQty(price, side, level, availableFunds,pairObj):

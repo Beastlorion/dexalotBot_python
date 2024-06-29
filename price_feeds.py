@@ -50,7 +50,7 @@ async def usdtUpdater():
     await asyncio.sleep(1)
 
 async def startTicker(client, bm, base, quote):
-  global marketPrice, lastUpdate
+  global marketPrice, lastUpdate, ethUsdtPrice
   symbol = base + quote
   if quote == "USDC":
     symbol = base + 'USDT'
