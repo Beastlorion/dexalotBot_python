@@ -15,10 +15,13 @@ volSpread = 0
 bybitBids = []
 bybitAsks = []
 lastUpdate = 0
+globalBase = None
 
 async def startPriceFeed(market,settings):
+  global globalBase
   base = tools.getSymbolFromName(market,0)
   quote = tools.getSymbolFromName(market,1)
+  globalBase = base
   if settings['useVolSpread']:
     asyncio.create_task(getVolSpread(base,quote))
   if settings['useCustomPrice']:
@@ -29,8 +32,11 @@ async def startPriceFeed(market,settings):
     if quote == "USDC" and base != "EUROC" and base != "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
-    elif quote == "USDT" or quote == "ETH":
+    elif quote == "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
+    elif base == 'WBTC' and quote == "ETH":
+      tickerTask = asyncio.create_task(startTicker(client, bm, 'WBTC', 'USDT'))
+      tickerTask = asyncio.create_task(startTicker(client, bm, 'ETH', 'USDT'))
     elif base == "USDT" and quote == "USDC":
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
@@ -50,7 +56,7 @@ async def usdtUpdater():
     await asyncio.sleep(1)
 
 async def startTicker(client, bm, base, quote):
-  global marketPrice, lastUpdate, ethUsdtPrice
+  global marketPrice, lastUpdate, ethUsdtPrice, globalBase
   symbol = base + quote
   if quote == "USDC":
     symbol = base + 'USDT'
@@ -68,10 +74,10 @@ async def startTicker(client, bm, base, quote):
         lastUpdate = time.time()
       elif symbol == 'ETHUSDT' and globalBase == "WBTC":
         ethUsdtPrice = binancePrice
-        lastUpdate = time.time()
-      elif symbol == 'WBTCUSDT' and ethUsdtPrice:
+      elif symbol == 'WBTCUSDT' and globalBase == 'WBTC' and ethUsdtPrice:
         marketPrice = binancePrice / ethUsdtPrice
-      elif symbol != 'WBTCUSDT':
+        lastUpdate = time.time()
+      elif quote == 'USDT':
         marketPrice = binancePrice
         lastUpdate = time.time()
   await client.close_connection()
