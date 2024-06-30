@@ -66,7 +66,11 @@ async def orderUpdater(base,quote):
     levels.append(level)
   global activeOrders
   
-  while contracts.status and (time.time() - price_feeds.lastUpdate < 30 or price_feeds.lastUpdate == 0):
+  timeout = 30
+  if 'timeout' in settings:
+    timeout = settings['timeout']
+  
+  while contracts.status and (time.time() - price_feeds.lastUpdate < timeout or price_feeds.lastUpdate == 0):
     marketPrice = price_feeds.marketPrice
     if marketPrice == 0 or contracts.bestAsk is None or contracts.bestBid is None:
       print("waiting for market data")
