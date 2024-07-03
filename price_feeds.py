@@ -15,6 +15,7 @@ volSpread = 0
 bybitBids = []
 bybitAsks = []
 lastUpdate = 0
+lastUpdateEth = 0
 globalBase = None
 
 async def startPriceFeed(market,settings):
@@ -56,11 +57,12 @@ async def usdtUpdater():
     await asyncio.sleep(1)
 
 async def startTicker(client, bm, base, quote):
-  global marketPrice, lastUpdate, ethUsdtPrice, globalBase
+  global marketPrice, lastUpdate, lastUpdateEth, ethUsdtPrice, globalBase
   symbol = base + quote
   if quote == "USDC":
     symbol = base + 'USDT'
-
+  if base == 'WBTC':
+    base = 'BTC'
   # start any sockets here, i.e a trade socket
   print("starting ticker:", symbol)
   ts = bm.depth_socket(symbol,5,100)
@@ -74,10 +76,11 @@ async def startTicker(client, bm, base, quote):
         lastUpdate = time.time()
       elif symbol == 'ETHUSDT' and globalBase == "WBTC":
         ethUsdtPrice = binancePrice
-      elif symbol == 'WBTCUSDT' and globalBase == 'WBTC' and ethUsdtPrice:
+        lastUpdateEth = time.time()
+      elif symbol == 'BTCUSDT' and globalBase == 'WBTC' and ethUsdtPrice:
         marketPrice = binancePrice / ethUsdtPrice
         lastUpdate = time.time()
-      elif quote == 'USDT':
+      elif quote == 'USDT' and globalBase != 'WBTC':
         marketPrice = binancePrice
         lastUpdate = time.time()
   await client.close_connection()
