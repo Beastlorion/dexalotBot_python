@@ -36,7 +36,7 @@ async def startPriceFeed(market,settings):
     elif quote == "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
     elif base == 'WBTC' and quote == "ETH":
-      tickerTask = asyncio.create_task(startTicker(client, bm, 'WBTC', 'USDT'))
+      tickerTask = asyncio.create_task(startTicker(client, bm, 'BTC', 'USDT'))
       tickerTask = asyncio.create_task(startTicker(client, bm, 'ETH', 'USDT'))
     elif base == "USDT" and quote == "USDC":
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
@@ -63,6 +63,7 @@ async def startTicker(client, bm, base, quote):
     symbol = base + 'USDT'
   if base == 'WBTC':
     base = 'BTC'
+    symbol = base + quote
     
   print("starting ticker:", symbol)
   ts = bm.depth_socket(symbol,5,100)
