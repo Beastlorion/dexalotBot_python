@@ -63,7 +63,7 @@ async def startTicker(client, bm, base, quote):
     symbol = base + 'USDT'
   if base == 'WBTC':
     base = 'BTC'
-  # start any sockets here, i.e a trade socket
+    
   print("starting ticker:", symbol)
   ts = bm.depth_socket(symbol,5,100)
   # then start receiving messages
@@ -89,13 +89,12 @@ async def usdc_usdtTicker(client, bm, base, quote):
   global usdcUsdt,marketPrice,lastUpdate
   symbol = 'USDCUSDT'
 
-  # start any sockets here, i.e a trade socket
-  ts = bm.trade_socket(symbol)
+  ts = bm.depth_socket(symbol,5,100)
   # then start receiving messages
   async with ts as tscm:
     while contracts.status:
       res = await tscm.recv()
-      usdcUsdt = float(res["p"])
+      usdcUsdt = (float(res["bids"][0][0])+float(res['asks'][0][0]))/2
       if (base == "USDT" and quote == "USDC"):
         marketPrice = 1/usdcUsdt
         lastUpdate = time.time()
