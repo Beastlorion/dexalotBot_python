@@ -73,7 +73,7 @@ async def orderUpdater(base,quote):
   while contracts.status and (time.time() - price_feeds.lastUpdate < timeout or price_feeds.lastUpdate == 0):
     marketPrice = price_feeds.marketPrice
     if 'priceAdjust' in settings and settings['priceAdjust'] != 0:
-      marketPrice = marketPrice * (1 + float(settings['priceAdjust']))
+      marketPrice = marketPrice * (1 + float(settings['priceAdjust']/100))
     if marketPrice == 0 or contracts.bestAsk is None or contracts.bestBid is None:
       print("waiting for market data")
       await asyncio.sleep(2)
