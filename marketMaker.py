@@ -70,7 +70,7 @@ async def orderUpdater(base,quote):
   if 'timeout' in settings:
     timeout = settings['timeout']
   
-  while contracts.status and (time.time() - price_feeds.lastUpdate < timeout or price_feeds.lastUpdate == 0) and (price_feeds.lastUpdateEth < timeout or price_feeds.lastUpdateEth == 0 or base != "WBTC"):
+  while contracts.status and (time.time() - price_feeds.lastUpdate < timeout or price_feeds.lastUpdate == 0) and (time.time() - price_feeds.lastUpdateEth < timeout or price_feeds.lastUpdateEth == 0 or base != "WBTC"):
     marketPrice = price_feeds.marketPrice
     if 'priceAdjust' in settings and settings['priceAdjust'] != 0:
       marketPrice = marketPrice * (1 + float(settings['priceAdjust']/100))
