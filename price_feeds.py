@@ -147,6 +147,8 @@ async def getCustomPrice(base,quote):
       
 async def getVolSpread(base,quote):
   global volSpread
+  if base == 'WBTC':
+    base = 'BTC'
   async with aiohttp.ClientSession() as s:
     url='http://localhost:3000/spreads'
     while contracts.status:
