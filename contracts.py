@@ -363,7 +363,7 @@ async def handleWebscokets(pairObj):
                 for order in tx['orders']:
                   if clientOrderID == order["clientOrderID"].decode('utf-8') and not order['tracked']:
                     print('UNTRACKED ORDER:',data)
-                    order['tracked'] = true
+                    order['tracked'] = True
               activeOrderIDs = []
               for activeOrder in activeOrders:
                 activeOrderIDs.append(activeOrder['clientOrderID'].decode('utf-8'))
