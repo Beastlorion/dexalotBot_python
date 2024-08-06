@@ -98,10 +98,10 @@ async def orderUpdater(base,quote):
           newPriorityGwei = round((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice - (float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100)) * 10000 * settings['priorityGwei'])
           if newPriorityGwei > priorityGwei:
             priorityGwei = newPriorityGwei
-    if failedCount > 0 and priorityGwei < lastPriorityGwei * 2:
-      priorityGwei = lastPriorityGwei * 2
-    if priorityGwei > 1000:
-      priorityGwei = 1000
+    if failedCount > 0 and priorityGwei < lastPriorityGwei * 1.2:
+      priorityGwei = lastPriorityGwei * 1.2
+    if priorityGwei > 100:
+      priorityGwei = 100
     if (priorityGwei > 0):
       print("PriorityGwei:", priorityGwei)
     resetOrders = False
