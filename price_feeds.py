@@ -63,7 +63,7 @@ async def startTicker(client, bm, base, quote):
     symbol = base + 'USDT'
   if base == 'WBTC':
     base = 'BTC'
-    symbol = base + quote
+    symbol = base + "USDT"
     
   print("starting ticker:", symbol)
   ts = bm.depth_socket(symbol,5,100)
