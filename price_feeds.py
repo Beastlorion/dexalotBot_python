@@ -169,6 +169,10 @@ async def bybitFeed (base,quote):
   ws = WebSocket(
     testnet=False,
     channel_type="spot",
+    ping_interval=20,
+    ping_timeout=10,
+    retries=20,
+    restart_on_error=True
   )
   convert = False
   if quote == "USDC":

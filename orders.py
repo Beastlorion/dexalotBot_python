@@ -217,12 +217,12 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
     if price > bestAsk:
       qty = math.floor((availQuoteFunds/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       if qty * price > float(pairObj["maxtrade_amnt"]) :
-        qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+        qty = (math.floor((float(pairObj["maxtrade_amnt"])/price) * 0.99 * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"]))
       elif qty * price < float(pairObj["mintrade_amnt"])/price:
         return False
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
-      gas = 1250000
+      gas = 3000000
       print('Execute Taker Buy - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
         contracts.address,
@@ -252,12 +252,12 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
     if price < bestBid:
       qty = math.floor(availBaseFunds * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       if qty * price > float(pairObj["maxtrade_amnt"]) :
-        qty = math.floor(float(pairObj["maxtrade_amnt"]) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
+        qty = math.floor((float(pairObj["maxtrade_amnt"])/price)* 0.99 * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       elif qty * price < float(pairObj["mintrade_amnt"]):
         return False
       if price <= myBestBid:
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
-      gas = 1250000
+      gas = 2000000
       print('Execute Taker Sell - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
         contracts.address,
