@@ -169,9 +169,9 @@ async def bybitFeed (base,quote):
   ws = WebSocket(
     testnet=False,
     channel_type="spot",
-    ping_interval=20,
-    ping_timeout=10,
-    retries=20,
+    ping_interval=10,
+    ping_timeout=5,
+    retries=0,
     restart_on_error=True
   )
   convert = False
