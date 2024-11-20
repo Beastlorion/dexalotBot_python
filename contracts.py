@@ -9,7 +9,7 @@ from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
 from eth_utils.units import units, decimal
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
-from web3.middleware import construct_sign_and_send_raw_middleware, geth_poa_middleware
+from web3.middleware import SignAndSendRawMiddlewareBuilder, ExtraDataToPOAMiddleware
 from eth_account.messages import encode_defunct
 ERC20ABIf = open('./ABIs/ERC20ABI.json')
 savaxABIf = open('./ABIs/savax_ABI.json')
@@ -25,7 +25,6 @@ units.update(
     }
 )
 
-freezeNewOrders = False
 contracts = {}
 tokenDetails = None
 address = None
@@ -55,8 +54,9 @@ takerFilled = 0
 makerFilled = 0
 refreshOrderLevel = False
 
-async def getDeployments(dt, s):
-  url = config["apiUrl"] + "deployment?contracttype=" + dt + "&returnabi=true"
+async def getDeployments(dt, s, testnet):
+  apiUrl = config['fuji_apiUrl'] if testnet else config["apiUrl"]
+  url = apiUrl + "deployment?contracttype=" + dt + "&returnabi=true"
   # contract = urllib.request.urlopen(url).read()
   # contract = json.loads(contract)
   async with s.get(url) as r:
@@ -66,33 +66,38 @@ async def getDeployments(dt, s):
     for item in contract :
       contracts[item["contract_name"]] = item
 
-async def getTokenDetails():
-  url = config["apiUrl"] + "tokens/"
+async def getTokenDetails(testnet):
+  apiUrl = config["fuji_apiUrl"] if testnet else config["apiUrl"]
+  url = apiUrl + "tokens/"
   tokenDetails = json.loads(urllib.request.urlopen(url).read())
   return tokenDetails
 
-async def initializeProviders(market,settings):
+async def initializeProviders(market,settings, testnet):
+
+  rpc_url = config["fuji_rpc_url"] if testnet else config["rpc_url"]
   contracts["SubNetProvider"] = {
-    "provider": Web3(Web3.HTTPProvider(config["rpc_url"])),
+    "provider": Web3(Web3.HTTPProvider(rpc_url)),
     # "provider": AsyncWeb3(AsyncHTTPProvider(config["rpc_url"])),
     "nonce": 0
   }
   # await contracts["SubNetProvider"]['provider'].is_connected()
-  contracts["SubNetProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
+  contracts["SubNetProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+
+  avaxc_rpc_url = config["fuji_avaxc_rpc_url"] if testnet else config["avaxc_rpc_url"]
   contracts["AvaxcProvider"] = {
-    "provider": Web3(Web3.HTTPProvider(config["avaxc_rpc_url"])),
+    "provider": Web3(Web3.HTTPProvider(avaxc_rpc_url)),
     # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
     "nonce": 0
   }
   # await contracts["AvaxcProvider"]['provider'].is_connected()
-  contracts["AvaxcProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
+  contracts["AvaxcProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
   contracts["ArbProvider"] = {
     "provider": Web3(Web3.HTTPProvider(config["arb_rpc_url"])),
     # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
     "nonce": 0
   }
   # await contracts["AvaxcProvider"]['provider'].is_connected()
-  contracts["ArbProvider"]["provider"].middleware_onion.inject(geth_poa_middleware, layer=0)
+  contracts["ArbProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
   if len(settings['secret_name'])>0:
     private_key = tools.getPrivateKey(market,settings)
   else:
@@ -101,9 +106,12 @@ async def initializeProviders(market,settings):
   assert private_key.startswith("0x"), "Private key must start with 0x hex prefix"
 
   account: LocalAccount = Account.from_key(private_key)
-  contracts["SubNetProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
-  contracts["AvaxcProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
-  contracts["ArbProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
+  # contracts["SubNetProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
+  # contracts["AvaxcProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
+  # contracts["ArbProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
+  contracts["SubNetProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
+  contracts["AvaxcProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
+  contracts["ArbProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
   
   # set default account
   contracts["SubNetProvider"]["provider"].eth.default_account = account.address
@@ -117,14 +125,13 @@ async def initializeProviders(market,settings):
   address = account.address
   message = encode_defunct(text="dexalot")
   signedMessage = contracts["SubNetProvider"]["provider"].eth.account.sign_message(message, private_key=private_key)
-  global signedHeaders
-  signature = address + ':' + signedMessage.signature.hex()
+  signature = address + ':0x' + signedMessage.signature.hex()
   contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
   contracts["ArbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
   print('finished initializeProviders')
   
-async def initializeContracts(market,pairObj):
+async def initializeContracts(market,pairObj,testnet):
   base = tools.getSymbolFromName(market,0)
   quote = tools.getSymbolFromName(market,1)
   
@@ -164,7 +171,6 @@ async def initializeContracts(market,pairObj):
     "tokenDetails": None,
     "deployedContract": None
   }
-  
   contracts["PortfolioSub"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSub"]["address"], abi=contracts["PortfolioSub"]["abi"]["abi"])
   contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSubHelper"]["address"], abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
   contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["TradePairs"]["address"], abi=contracts["TradePairs"]["abi"]["abi"])
@@ -175,18 +181,17 @@ async def initializeContracts(market,pairObj):
   if base == 'sAVAX':
     contracts["sAVAX"]["proxy"] = contracts["AvaxcProvider"]["provider"].eth.contract(address='0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE', abi=savaxABI)
   
-  tokens = await getTokenDetails()
+  tokens = await getTokenDetails(testnet)
   for item in tokens:
     if item["subnet_symbol"] in contracts and item["subnet_symbol"] != "AVAX":
-      contracts[item["subnet_symbol"]]["tokenDetails"] = item
-      if item['env'] == "production-multi-avax":
+      if item['env'] == "production-multi-avax" or (testnet and item['env'] == "fuji-multi-avax"):
+        contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
-        contracts["PortfolioMain"]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
-      elif item['env'] == "production-multi-arb":
+      elif item['env'] == "production-multi-arb" or (testnet and item['env'] == "fuji-multi-arb" and item["subnet_symbol"] != "ALOT"):
+        contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
-        contracts["PortfolioMain"]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts["PortfolioMain"]["address"], abi=contracts["PortfolioMain"]["abi"]["abi"])
     elif item["subnet_symbol"] == "AVAX":
-      contracts[item["subnet_symbol"]]["tokenDetails"] = item
+      contracts[item["subnet_symbol"]]["tokenDetails"] = item 
   print('finished initializeContracts')
   return
       
@@ -217,10 +222,10 @@ def getRates(pairObj,pairByte32):
   print('Maker Rate BP:',makerRate)
   print('Taker Rate BP:',takerRate)
   
-async def startDataFeeds(pairObj):
-  block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
+async def startDataFeeds(pairObj, testnet):
+  # block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
   # a = asyncio.create_task(log_loop(block_filter, 0.5))
-  c = asyncio.create_task(handleWebscokets(pairObj))
+  c = asyncio.create_task(handleWebscokets(pairObj, testnet))
   # d = asyncio.create_task(updateBalancesLoop(pairObj))
   await asyncio.gather(c)
   
@@ -231,7 +236,7 @@ async def startDataFeeds(pairObj):
 #     await asyncio.sleep(0.5)
 #   return
     
-async def handleWebscokets(pairObj):
+async def handleWebscokets(pairObj, testnet):
   global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
@@ -241,7 +246,7 @@ async def handleWebscokets(pairObj):
   tradereventsubscribe = {"type":"tradereventsubscribe", "signature":signature}
   unsubscribeBook = {"data":pairObj['pair'],"pair":pairObj['pair'],"type":"unsubscribe"}
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
-  wsUrl = "wss://api.dexalot.com"
+  wsUrl = "wss://api.dexalot-test.com" if testnet else "wss://api.dexalot.com"
   
   while status:
     reconnect = False
@@ -252,6 +257,7 @@ async def handleWebscokets(pairObj):
         req.add_header('x-apikey', config['wsKey'])
         token = json.loads(urlopen(req).read())['token']
         wsUrl = "wss://api.dexalot.com?wstoken=" + token
+
       async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
         await websocket.send(json.dumps(tradereventsubscribe))
@@ -465,7 +471,6 @@ def getBalances(base, quote, pairObj):
     # get AVAX balances
     avaxC = contracts["AvaxcProvider"]["provider"].eth.get_balance(address)
     contracts["AVAX"]["mainnetBal"] = Web3.from_wei(avaxC, 'ether')
-    
     avaxD = portfolio.functions.getBalance(address, "AVAX".encode('utf-8')).call()
     contracts["AVAX"]["portfolioTot"] = Web3.from_wei(avaxD[0], 'ether')
     contracts["AVAX"]["portfolioAvail"] = Web3.from_wei(avaxD[1], 'ether')

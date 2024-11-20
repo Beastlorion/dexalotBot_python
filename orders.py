@@ -12,6 +12,8 @@ config = {
     **dotenv_values(".env.shared"),
     **dotenv_values(".env.secret")
 }
+testnet = sys.argv[2] == "fuji"
+
 units.update(
     {
         "8_dec": decimal.Decimal("100000000"),  # Add in 8 decimals
@@ -25,11 +27,11 @@ openOrders = None
 async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
   try:
-    url = config["signedApiUrl"] + "orders?pair=" + pair + "&category=0"
+    signedApiUrl = config["fuji_signedApiUrl"] if testnet else config["signedApiUrl"]
+    url = signedApiUrl + "orders?pair=" + pair + "&category=0"
     req = Request(url)
     req.add_header('x-signature', contracts.signature)
     openOrdersJson = urlopen(req).read()
-    # print("open orders:",openOrders)
     openOrders = json.loads(openOrdersJson)
     if len(contracts.activeOrders)>0 and refreshActiveOrders:
       trackedOrderIDs = []
@@ -148,12 +150,13 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
     contracts.status = False
   contracts.activeOrders = []
   
-def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds):
+def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds, myAsks):
   try:
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
-        # bestAsk = contracts.asks[1][0]
+    if (len(myAsks) > 0 and bestAsk == myAsks[0]['price']):
+      bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
@@ -175,16 +178,13 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
-def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds):
+def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds, myBids):
   try:
     orders = []
     availableFunds = availBaseFunds
     bestBid = contracts.bestBid
-    myBestAsk = False
-    for order in contracts.activeOrders:
-      if order['price'] == bestBid and order['side'] == 0:
-        myBestAsk = True
-        # bestBid = contracts.bids[1][0]
+    if (len(myBids) > 0 and bestBid == myBids[0]['price']):
+      bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
@@ -196,19 +196,20 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         if qty * marketPrice < float(pairObj["mintrade_amnt"]):
           continue
-        if qty * price > float(pairObj["maxtrade_amnt"]) :
+        if qty * price > float(pairObj["maxtrade_amnt"]):
           qty = math.floor((float(pairObj["maxtrade_amnt"])/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
         availableFunds = availableFunds - qty
         orders.append({'side':1,'price':price,'qty':qty,'level':int(level['level']), 'clientOrderID': HexBytes(str(shortuuid.uuid()).encode('utf-8')),'timestamp':time.time(), 'tracked':False})
         if retrigger:
           contracts.retrigger = True
   except Exception as error:
-    print("ERROR DURING GENERATE BUY ORDERS:",error)
+    print("ERROR DURING GENERATE SELL ORDERS:",error)
   return orders
 
-async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestAsk,availQuoteFunds):
+async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myAsks,availQuoteFunds):
   try:
     bestAsk = contracts.bestAsk
+    myBestAsk = myAsks[0]['price'] if len(myAsks) > 0 else marketPrice * 1.1
     if bestAsk == myBestAsk:
       return False
     spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,{'level':0},0)
@@ -218,22 +219,23 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
       qty = math.floor((availQuoteFunds/price) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
       if qty * price > float(pairObj["maxtrade_amnt"]) :
         qty = (math.floor((float(pairObj["maxtrade_amnt"])/price) * 0.99 * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"]))
-      elif qty * price < float(pairObj["mintrade_amnt"])/price:
+      elif qty * price < float(pairObj["mintrade_amnt"]):
         return False
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 3000000
       print('Execute Taker Buy - Price:',price,'Qty:',qty)
-      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
-        contracts.address,
-        str(shortuuid.uuid()).encode('utf-8'),
-        pairByte32,
-        Web3.to_wei(price, shiftPrice),
-        Web3.to_wei(qty, shiftQty),
-        0,
-        1,
-        2
-      ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addNewOrder({
+        'clientOrderId': str(shortuuid.uuid()).encode('utf-8'),
+        'tradePairId': pairByte32,
+        'price': Web3.to_wei(price, shiftPrice),
+        'quantity': Web3.to_wei(qty, shiftQty),
+        'traderaddress': contracts.address,
+        'side': 0,
+        'type1': 1,
+        'type2': 2,
+        'stp': 1
+      }).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
       contracts.incrementNonce()
       await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     else:
@@ -241,9 +243,10 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
   except Exception as error:
     print("Error in executeTakerBuy:",error)
     
-async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availBaseFunds):
+async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBids,availBaseFunds):
   try:
     bestBid = contracts.bestBid
+    myBestBid = myBids[0]['price'] if len(myBids) > 0 else marketPrice * 0.9
     if bestBid == myBestBid:
       return False
     spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
@@ -259,16 +262,17 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 2000000
       print('Execute Taker Sell - Price:',price,'Qty:',qty)
-      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrder(
-        contracts.address,
-        str(shortuuid.uuid()).encode('utf-8'),
-        pairByte32,
-        Web3.to_wei(price, shiftPrice),
-        Web3.to_wei(qty, shiftQty),
-        1,
-        1,
-        2
-      ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+      contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addNewOrder({
+        'clientOrderId': str(shortuuid.uuid()).encode('utf-8'),
+        'tradePairId': pairByte32,
+        'price': Web3.to_wei(price, shiftPrice),
+        'quantity': Web3.to_wei(qty, shiftQty),
+        'traderaddress': contracts.address,
+        'side': 1,
+        'type1': 1,
+        'type2': 2,
+        'stp': 1
+      }).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
       contracts.incrementNonce()
       await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
     else:
@@ -290,8 +294,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if contracts.retrigger:
     isRetrigger = True
   contracts.retrigger = False
-  bids = []
-  asks = []
   quoteDecimals = pairObj["quote_evmdecimals"]
   shiftPrice = 'ether'
   match quoteDecimals:
@@ -307,21 +309,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     case 8:
       shiftQty = "8_dec"
       
-  for order in contracts.activeOrders:
-    if order['side'] == 0:
-      bids.append(order)
-    elif order['side'] == 1:
-      asks.append(order)
-  sortedBids = sorted(bids, key = lambda d: d['price'], reverse = True)
-  sortedAsks = sorted(asks, key = lambda d: d['price'])
-  if len(sortedBids) > 0: 
-    myBestBid = sortedBids[0]['price']
-  else:
-    myBestBid = 0
-  if len(sortedAsks) > 0: 
-    myBestAsk = sortedAsks[0]['price']
-  else:
-    myBestAsk = marketPrice*2
+  myBids, myAsks = tools.getMyOrdersSorted()
     
   totalBaseFunds = float(contracts.contracts[base]["portfolioTot"])
   totalQuoteFunds = float(contracts.contracts[quote]["portfolioTot"])
@@ -339,9 +327,9 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
 
   if settings['takerEnabled']:
     if takerSell:
-      await executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestBid,availTakerBaseFunds)
+      await executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBids,availTakerBaseFunds)
     elif takerBuy:
-      await executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBestAsk,availTakerQuoteFunds)
+      await executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myAsks,availTakerQuoteFunds)
       
   for order in contracts.activeOrders:
     if order['side'] == 0:
@@ -358,8 +346,8 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     elif order['side'] == 1:
       availBaseFunds = availBaseFunds + order['qtyLeft']
       
-  buyOrders = generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds)
-  sellOrders = generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds)
+  buyOrders = generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds, myAsks)
+  sellOrders = generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds, myBids)
   
   limit_orders = buyOrders + sellOrders
   
@@ -397,13 +385,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(replaceOrders) > 0:
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
-    asyncio.create_task(replaceOrderList(sortedOrders, pairObj,shiftPrice,shiftQty,priorityGwei))
+    asyncio.create_task(replaceOrderList(sortedOrders, pairObj, pairByte32, shiftPrice,shiftQty,priorityGwei))
     cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
   addTx = False
   if len(newOrders) > 0:
     addTx = True
-    asyncio.create_task(addLimitOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty))
+    asyncio.create_task(addOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty))
     addOrderCount = addOrderCount + len(newOrders)
   
   if replaceTx or addTx:
@@ -418,28 +406,37 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     await asyncio.sleep(1)
   return True
 
-async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty, priorityGwei):
+async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, priorityGwei):
   
   updateIDs = []
   clientOrderIDs = []
   prices = []
   quantities = []
+
+  ordersToReplace = []
   
   for order in orders:
-    updateIDs.append(order['orderID'])
-    clientOrderIDs.append(order['clientOrderID'])
-    prices.append(Web3.to_wei(order["price"], shiftPrice))
-    quantities.append(Web3.to_wei(order["qty"], shiftQty))
+    updateIDs.append(order["orderID"])
+
+    ordersToReplace.append({
+      'traderaddress': contracts.address,
+      'clientOrderId': order['clientOrderID'],
+      'tradePairId':pairByte32,
+      'price':Web3.to_wei(order["price"], shiftPrice),
+      'quantity':Web3.to_wei(order["qty"], shiftQty),
+      'side':order['side'],
+      'type1': 1,
+      'type2': 3,
+      'stp': 1
+    })
   
-  print('replaceOrderList - Prices:', prices, 'quantities',quantities)
+  print('replaceOrderList -', len(orders), updateIDs)
   try:
     contracts.newPendingTx('replaceOrderList',orders)
     gas = len(orders) * 1000000
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelReplaceList(
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelAddList(
       updateIDs,
-      clientOrderIDs,
-      prices,
-      quantities
+      ordersToReplace
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
@@ -451,38 +448,38 @@ async def replaceOrderList(orders, pairObj, shiftPrice, shiftQty, priorityGwei):
         contracts.pendingTransactions.remove(tx)
   return
 
-async def addLimitOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty):
+async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty):
   prices = []
   quantities = []
   sides = []
   clientOrderIDs = []
   type2s = []
-        
-  for order in limit_orders:
-    
-    prices.append(Web3.to_wei(order["price"], shiftPrice))
-    quantities.append(Web3.to_wei(order["qty"], shiftQty))
-    sides.append(order["side"])
-    clientOrderIDs.append(order['clientOrderID'])
-    type2s.append(3)
 
-  print('addLimitOrderList - Prices:', prices, 'quantities',quantities)
-  # print('New Orders:', len(limit_orders),'time:',time.time(),limit_orders)
+  ordersToSend = []
+  for order in limit_orders:
+    ordersToSend.append({
+      'traderaddress': contracts.address,
+      'clientOrderId': order['clientOrderID'],
+      'tradePairId':pairByte32,
+      'price':Web3.to_wei(order["price"], shiftPrice),
+      'quantity':Web3.to_wei(order["qty"], shiftQty),
+      'side':order["side"],
+      'type1': 1,
+      'type2': 3,
+      'stp': 1
+    })
+
+  print('Add order list - ', len(limit_orders))
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
     gas = len(limit_orders) * 700000
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addLimitOrderList(
-      pairByte32,
-      clientOrderIDs,
-      prices,
-      quantities,
-      sides,
-      type2s
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrderList(
+      ordersToSend
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
   except Exception as error:
-    print('error in addLimitOrderList:', error)
+    print('error in addOrderList:', error)
     for tx in contracts.pendingTransactions:
       if tx['purpose'] == 'addOrderList':
         contracts.pendingTransactions.remove(tx)

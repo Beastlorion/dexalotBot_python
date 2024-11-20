@@ -42,6 +42,8 @@ pip install web3
 pip install python-dotenv
 pip install python_binance
 pip install shortuuid
+pip install boto3
+pip install pybit
 ```
 
 See settings in .env.shared

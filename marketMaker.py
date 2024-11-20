@@ -13,6 +13,7 @@ config = {
 pairObj = None
 activeOrders = []
 market = sys.argv[1]
+testnet = sys.argv[2] == "fuji"
 responseTime = settings.settings['responseTime']
 settings = settings.settings[market]
 base = tools.getSymbolFromName(market,0)
@@ -22,21 +23,24 @@ pairByte32 = HexBytes(pairStr.encode('utf-8'))
 
 async def start():
   global pairObj
-        
-  pairObj = await tools.getPairObj(pairStr,config["apiUrl"]);
+  
+  if testnet:
+    print("Starting on Fuji testnet")
+  apiUrl = config["fuji_apiUrl"] if testnet else config["apiUrl"]
+  pairObj = await tools.getPairObj(pairStr,apiUrl);
   if (pairObj is None):
     print("failed to get pairObj")
     return
   # print(pairObj)
   async with aiohttp.ClientSession() as s:
     tasks = []
-    tasks = [contracts.getDeployments("TradePairs",s),contracts.getDeployments("Portfolio",s),contracts.getDeployments("OrderBooks",s),contracts.getDeployments("PortfolioSubHelper",s)]
+    tasks = [contracts.getDeployments("TradePairs",s, testnet),contracts.getDeployments("Portfolio",s, testnet),contracts.getDeployments("OrderBooks",s,testnet),contracts.getDeployments("PortfolioSubHelper",s,testnet)]
     res = await asyncio.gather(*tasks)
   await aiohttp.ClientSession().close()
     
-    
-  await contracts.initializeProviders(market,settings)
-  await contracts.initializeContracts(market,pairObj)
+  await contracts.initializeProviders(market,settings,testnet)
+  await contracts.initializeContracts(market,pairObj,testnet)
+
   contracts.getRates(pairObj,pairByte32)
   await contracts.refreshDexalotNonce()
   await orders.cancelAllOrders(pairStr)
@@ -44,7 +48,7 @@ async def start():
   
   contracts.getBalances(base,quote,pairObj)
   orders.getBestOrders()
-  await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj),orderUpdater(base,quote))
+  await asyncio.gather(price_feeds.startPriceFeed(market,settings),contracts.startDataFeeds(pairObj, testnet),orderUpdater(base,quote))
   contracts.status = False
   await asyncio.sleep(2)
 
@@ -57,6 +61,8 @@ async def orderUpdater(base,quote):
   lastPriorityGwei = 0
   resetOrders = False
   startTime = time.time()
+
+  print('Starting Order Updater')
   
   for i in settings['levels']:
     level = i

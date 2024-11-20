@@ -31,6 +31,27 @@ async def getPairObj(pair, apiUrl):
 def getIncrement(quoteDisplayDecimals):
   return float(1 * pow(10,-1 * quoteDisplayDecimals));
     
+def getMyOrdersSorted():
+  bids = []
+  asks = []
+  for order in contracts.activeOrders:
+    if order['side'] == 0:
+      bids.append(order)
+    elif order['side'] == 1:
+      asks.append(order)
+  sortedBids = sorted(bids, key = lambda d: d['price'], reverse = True)
+  sortedAsks = sorted(asks, key = lambda d: d['price'])
+  
+  return sortedBids, sortedAsks
+  # if len(sortedBids) > 0: 
+  #   myBestBid = sortedBids[0]['price']
+  # else:
+  #   myBestBid = 0
+  # if len(sortedAsks) > 0: 
+  #   myBestAsk = sortedAsks[0]['price']
+  # else:
+  #   myBestAsk = marketPrice*2
+  
 def getSpread(marketPrice,settings,funds,totalFunds,level,side):
   defensiveSkew = 0
   offensiveSkew = 0
