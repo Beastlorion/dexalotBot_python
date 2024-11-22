@@ -155,7 +155,7 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
-    if (len(myAsks) > 0 and bestAsk == myAsks[0]['price']):
+    if (settings['pairType'] == 'volatile' and len(myAsks) > 0 and bestAsk == myAsks[0]['price']):
       bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       retrigger = False
@@ -183,7 +183,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availBaseFunds
     bestBid = contracts.bestBid
-    if (len(myBids) > 0 and bestBid == myBids[0]['price']):
+    if (settings['pairType'] == 'volatile' and len(myBids) > 0 and bestBid == myBids[0]['price']):
       bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       retrigger = False
