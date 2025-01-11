@@ -77,27 +77,26 @@ async def initializeProviders(market,settings, testnet):
   rpc_url = config["fuji_rpc_url"] if testnet else config["rpc_url"]
   contracts["SubNetProvider"] = {
     "provider": Web3(Web3.HTTPProvider(rpc_url)),
-    # "provider": AsyncWeb3(AsyncHTTPProvider(config["rpc_url"])),
     "nonce": 0
   }
-  # await contracts["SubNetProvider"]['provider'].is_connected()
   contracts["SubNetProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
   avaxc_rpc_url = config["fuji_avaxc_rpc_url"] if testnet else config["avaxc_rpc_url"]
   contracts["AvaxcProvider"] = {
     "provider": Web3(Web3.HTTPProvider(avaxc_rpc_url)),
-    # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
     "nonce": 0
   }
-  # await contracts["AvaxcProvider"]['provider'].is_connected()
   contracts["AvaxcProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
   contracts["ArbProvider"] = {
     "provider": Web3(Web3.HTTPProvider(config["arb_rpc_url"])),
-    # "provider": AsyncWeb3(AsyncHTTPProvider(config["avaxc_rpc_url"])),
     "nonce": 0
   }
-  # await contracts["AvaxcProvider"]['provider'].is_connected()
   contracts["ArbProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+  contracts["BaseProvider"] = {
+    "provider": Web3(Web3.HTTPProvider(config["base_rpc_url"])),
+    "nonce": 0
+  }
+  contracts["BaseProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
   if len(settings['secret_name'])>0:
     private_key = tools.getPrivateKey(market,settings)
   else:
@@ -106,17 +105,16 @@ async def initializeProviders(market,settings, testnet):
   assert private_key.startswith("0x"), "Private key must start with 0x hex prefix"
 
   account: LocalAccount = Account.from_key(private_key)
-  # contracts["SubNetProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
-  # contracts["AvaxcProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
-  # contracts["ArbProvider"]["provider"].middleware_onion.add(construct_sign_and_send_raw_middleware(account))
   contracts["SubNetProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
   contracts["AvaxcProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
   contracts["ArbProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
+  contracts["BaseProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
   
   # set default account
   contracts["SubNetProvider"]["provider"].eth.default_account = account.address
   contracts["AvaxcProvider"]["provider"].eth.default_account = account.address
   contracts["ArbProvider"]["provider"].eth.default_account = account.address
+  contracts["BaseProvider"]["provider"].eth.default_account = account.address
   
   contracts["SubNetProvider"]["provider"].strict_bytes_type_checking = False
   contracts["AvaxcProvider"]["provider"].strict_bytes_type_checking = False
@@ -129,6 +127,7 @@ async def initializeProviders(market,settings, testnet):
   contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
   contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
   contracts["ArbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
+  contracts["BaseProvider"]["nonce"] = contracts["BaseProvider"]["provider"].eth.get_transaction_count(address)
   print('finished initializeProviders')
   
 async def initializeContracts(market,pairObj,testnet):
@@ -190,6 +189,9 @@ async def initializeContracts(market,pairObj,testnet):
       elif item['env'] == "production-multi-arb" or (testnet and item['env'] == "fuji-multi-arb" and item["subnet_symbol"] != "ALOT"):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+      elif item['env'] == "production-multi-base" or (testnet and item['env'] == "fuji-multi-base" and item["subnet_symbol"] != "ALOT"):
+        contracts[item["subnet_symbol"]]["tokenDetails"] = item
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BaseProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
     elif item["subnet_symbol"] == "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item 
   print('finished initializeContracts')
