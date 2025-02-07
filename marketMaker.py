@@ -120,7 +120,7 @@ async def orderUpdater(base,quote):
     takerBuy = False
     takerSell = False
     if settings['takerEnabled']:
-      takerBuy = marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk
+      takerBuy = contracts.bestAsk > 0 and marketPrice * (1 - settings['takerThreshold']/100) > contracts.bestAsk
       takerSell = marketPrice * (1 + settings['takerThreshold']/100) < contracts.bestBid
     if levelsToUpdate > 0 or takerBuy or takerSell:
       print("New market price:", marketPrice, "volatility spread:",round(price_feeds.volSpread*100,6), 'Run Time:',time.time() - startTime)

@@ -155,14 +155,14 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
-    if (settings['pairType'] == 'volatile' and len(myAsks) > 0 and bestAsk == myAsks[0]['price']):
+    if (settings['pairType'] == 'volatile' and len(myAsks) > 0 and bestAsk == myAsks[0]['price']) and len(contracts.asks) > 1:
       bestAsk = contracts.asks[1][0]
     for level in settings["levels"]:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
         price = math.floor(marketPrice * (1 - spread) * pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
-        if price >= bestAsk:
+        if price >= bestAsk and not settings['autoTake']:
           price = math.floor((bestAsk * pow(10,pairObj["quotedisplaydecimals"])) - 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,0,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
@@ -183,14 +183,14 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
     orders = []
     availableFunds = availBaseFunds
     bestBid = contracts.bestBid
-    if (settings['pairType'] == 'volatile' and len(myBids) > 0 and bestBid == myBids[0]['price']):
+    if (settings['pairType'] == 'volatile' and len(myBids) > 0 and bestBid == myBids[0]['price']) and len(contracts.bids) > 1:
       bestBid = contracts.bids[1][0]
     for level in settings["levels"]:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
         price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
-        if price <= bestBid:
+        if price <= bestBid and not settings['autoTake']:
           price = math.ceil((bestBid * pow(10,pairObj["quotedisplaydecimals"])) + 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
@@ -316,7 +316,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   totalFunds = totalBaseFunds * marketPrice + totalQuoteFunds
   # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
   # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
-  if settings['takerEnabled']:
+  if settings['takerEnabled'] and not settings['autoTake']:
     availBaseFunds = totalBaseFunds * .999 * (1 - settings['takerReserve']/100)
     availQuoteFunds = totalQuoteFunds * .999 * (1 - settings['takerReserve']/100)
     availTakerBaseFunds = totalBaseFunds * .999 * (settings['takerReserve']/100)
@@ -325,7 +325,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     availBaseFunds = totalBaseFunds * .999
     availQuoteFunds = totalQuoteFunds * .999
 
-  if settings['takerEnabled']:
+  if settings['takerEnabled'] and not settings['autoTake']:
     if takerSell:
       await executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBids,availTakerBaseFunds)
     elif takerBuy:
@@ -385,13 +385,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(replaceOrders) > 0:
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
-    asyncio.create_task(replaceOrderList(sortedOrders, pairObj, pairByte32, shiftPrice,shiftQty,priorityGwei))
+    asyncio.create_task(replaceOrderList(sortedOrders, pairObj, pairByte32, shiftPrice,shiftQty,priorityGwei,settings))
     cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
   addTx = False
   if len(newOrders) > 0:
     addTx = True
-    asyncio.create_task(addOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty))
+    asyncio.create_task(addOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty,settings))
     addOrderCount = addOrderCount + len(newOrders)
   
   if replaceTx or addTx:
@@ -406,7 +406,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     await asyncio.sleep(1)
   return True
 
-async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, priorityGwei):
+async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, priorityGwei,settings):
   
   updateIDs = []
   clientOrderIDs = []
@@ -417,7 +417,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
   
   for order in orders:
     updateIDs.append(order["orderID"])
-
+    
     ordersToReplace.append({
       'traderaddress': contracts.address,
       'clientOrderId': order['clientOrderID'],
@@ -426,7 +426,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
       'quantity':Web3.to_wei(order["qty"], shiftQty),
       'side':order['side'],
       'type1': 1,
-      'type2': 3,
+      'type2': 3 if not settings['autoTake'] else 0,
       'stp': 1
     })
   
@@ -448,7 +448,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
         contracts.pendingTransactions.remove(tx)
   return
 
-async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty):
+async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,settings):
   prices = []
   quantities = []
   sides = []
@@ -465,7 +465,7 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty):
       'quantity':Web3.to_wei(order["qty"], shiftQty),
       'side':order["side"],
       'type1': 1,
-      'type2': 3,
+      'type2': 3 if not settings['autoTake'] else 0,
       'stp': 1
     })
 
