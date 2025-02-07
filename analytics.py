@@ -2,8 +2,7 @@ import sys, json, math
 from datetime import datetime, timezone
 from dotenv import dotenv_values
 from urllib.request import Request, urlopen
-import tools, contracts
-
+import tools, contracts, settings
 
 config = {
   **dotenv_values(".env.shared"),
@@ -14,11 +13,13 @@ market = sys.argv[1]
 base = tools.getSymbolFromName(market,0)
 quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
+settings = settings.settings[market]
 
 async def start():
   apiUrl = config["apiUrl"]
   pairObj = await tools.getPairObj(pairStr,apiUrl)
-  await contracts.initializeProviders(market,{"secret_name":""},False)
+  
+  await contracts.initializeProviders(market,settings,False)
   signedApiUrl = config["signedApiUrl"]
 
   startDate = int(datetime.utcnow().timestamp()) - 604800
