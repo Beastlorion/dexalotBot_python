@@ -15,7 +15,7 @@ async def main():
       await analytics.start()      
     else:
       net = 'm'
-      if sys.argv == 2 and sys.argv[1] == "fuji":
+      if sys.argv == 2 and sys.argv[2] == "fuji":
         net = 'fuji'
       await marketMaker.start(net)
   except asyncio.CancelledError:
