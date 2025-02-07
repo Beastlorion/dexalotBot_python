@@ -1,17 +1,23 @@
 import sys, os, asyncio, time, ast
-from dotenv import load_dotenv, dotenv_values
 import tools
 import price_feeds
 import marketMaker
 import orders
 import contracts
+import analytics
 
 client = {}
 marketID = None
 
 async def main():
   try:
-    await marketMaker.start()
+    if len(sys.argv) > 2 and sys.argv[2] == "analytics":
+      await analytics.start()      
+    else:
+      net = 'm'
+      if sys.argv == 2 and sys.argv[1] == "fuji":
+        net = 'fuji'
+      await marketMaker.start(net)
   except asyncio.CancelledError:
     print("asyncio.CancelledError")
   except KeyboardInterrupt:
