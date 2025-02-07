@@ -185,7 +185,7 @@ async def initializeContracts(market,pairObj,testnet):
     if item["subnet_symbol"] in contracts and item["subnet_symbol"] != "AVAX":
       if item['env'] == "production-multi-avax" or (testnet and item['env'] == "fuji-multi-avax"):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
-        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
       elif item['env'] == "production-multi-arb" or (testnet and item['env'] == "fuji-multi-arb" and item["subnet_symbol"] != "ALOT"):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
@@ -271,10 +271,20 @@ async def handleWebscokets(pairObj, testnet):
             
             if parsed['type'] == 'orderBooks':
               data = parsed['data']
-              bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
-              bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
-              # print(bestBid,bestAsk)
+              if data['buyBook'][0]['prices'].split(',')[0] != '':
+                bestBid = float(Web3.from_wei(float(data['buyBook'][0]['prices'].split(',')[0]), quoteShift))
+              else:
+                bestBid = 0
+              if data['sellBook'][0]['prices'].split(',')[0] != '':
+                bestAsk = float(Web3.from_wei(float(data['sellBook'][0]['prices'].split(',')[0]), quoteShift))
+              else:
+                bestAsk = float('inf')
+              #print(bestBid,bestAsk)
               bidPrices = data['buyBook'][0]['prices'].split(',')
+              if bidPrices[0] == '':
+                bidPrices = []
+              if askPrices[0] == '':
+                askPrices = []
               bidQtys = data['buyBook'][0]['quantities'].split(',')
               askPrices = data['sellBook'][0]['prices'].split(',')
               askQtys = data['sellBook'][0]['quantities'].split(',')
