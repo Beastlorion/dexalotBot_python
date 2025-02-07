@@ -6,14 +6,13 @@ from hexbytes import HexBytes
 import price_feeds
 
 config = {
-    **dotenv_values(".env.shared"),
-    **dotenv_values(".env.secret")
+  **dotenv_values(".env.shared"),
+  **dotenv_values(".env.secret")
 }
 
 pairObj = None
 activeOrders = []
 market = sys.argv[1]
-testnet = sys.argv[2] == "fuji"
 responseTime = settings.settings['responseTime']
 settings = settings.settings[market]
 base = tools.getSymbolFromName(market,0)
@@ -21,8 +20,9 @@ quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
 pairByte32 = HexBytes(pairStr.encode('utf-8'))
 
-async def start():
+async def start(net):
   global pairObj
+  testnet = net == 'fuji'
   
   if testnet:
     print("Starting on Fuji testnet")

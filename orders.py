@@ -12,7 +12,10 @@ config = {
     **dotenv_values(".env.shared"),
     **dotenv_values(".env.secret")
 }
-testnet = sys.argv[2] == "fuji"
+
+testnet = False
+if len(sys.argv) > 2:
+  testnet = sys.argv[2] == "fuji"
 
 units.update(
     {
