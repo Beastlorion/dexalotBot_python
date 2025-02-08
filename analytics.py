@@ -45,7 +45,7 @@ async def start():
     print("start=",datetime.fromtimestamp(start))
     print("end=",datetime.fromtimestamp(end))
     itemsperpage = 20
-    url = signedApiUrl + "orders?pair=" + pairStr + "&category=3" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+itemsperpage+"&pageno=1"
+    url = signedApiUrl + "orders?pair=" + pairStr + "&category=1" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno=1"
     try:
       req = Request(url)
       req.add_header('x-signature', contracts.signature)
@@ -55,10 +55,11 @@ async def start():
       if int(orders['count']) > 0:
         ordersList = ordersList + orders['rows']
     except Exception as err:
-      print(err)
-    if orders['nbrof_rows'] > itemsperpage:
-      for x in range(1,math.ceil(orders['nbrof_rows']/itemsperpage)):
-        url = signedApiUrl + "orders?pair=" + pairStr + "&category=3" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+itemsperpage+"&pageno="+(x+1)
+      print('err in first orders pull in analytics', err)
+    rows = int(ordersList[0]['nbrof_rows'])
+    if rows > itemsperpage:
+      for x in range(1,math.ceil(rows/itemsperpage)):
+        url = signedApiUrl + "orders?pair=" + pairStr + "&category=1" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno="+str(x+1)
         try:
           req = Request(url)
           req.add_header('x-signature', contracts.signature)
