@@ -75,34 +75,37 @@ async def start():
   runAnalytics(ordersList)
 
 def runAnalytics(ordersList):
-  data = {
-    'totalCost' : 0,
-    'totalSold' : 0,
-    'qtyOutstanding' : 0,
-    'totalQtyBought':0,
-    'totalQtySold':0,
-    'totalFees' : 0,
-    'buyFills' : 0,
-    'sellFills' : 0,
-    'totalVolumeBase': 0,
-    'totalVolumeQuote': 0
-  };
-  for order in ordersList:
-    qtyFilled = float(order['quantityfilled'])
-    price = float(data['price'])
-    if order['side'] == 0:
-      data['buyFills'] += 1
-      data['totalCost'] += qtyFilled * price
-      data['totalQtyBought'] += qtyFilled
-    else:
-      data['sellFills'] += 1
-      data['totalSold'] += qtyFilled * price
-      data['totalQtySold'] += qtyFilled
-    data['totalFees'] += float(order['totalfee']) * price
-    data['totalVolumeBase'] += float(qtyFilled)
-    data['totalVolumeQuote'] += float(qtyFilled) * price
+  try:
+    data = {
+      'totalCost' : 0,
+      'totalSold' : 0,
+      'qtyOutstanding' : 0,
+      'totalQtyBought':0,
+      'totalQtySold':0,
+      'totalFees' : 0,
+      'buyFills' : 0,
+      'sellFills' : 0,
+      'totalVolumeBase': 0,
+      'totalVolumeQuote': 0
+    };
+    for order in ordersList:
+      qtyFilled = float(order['quantityfilled'])
+      price = float(data['price'])
+      if order['side'] == 0:
+        data['buyFills'] += 1
+        data['totalCost'] += qtyFilled * price
+        data['totalQtyBought'] += qtyFilled
+      else:
+        data['sellFills'] += 1
+        data['totalSold'] += qtyFilled * price
+        data['totalQtySold'] += qtyFilled
+      data['totalFees'] += float(order['totalfee']) * price
+      data['totalVolumeBase'] += float(qtyFilled)
+      data['totalVolumeQuote'] += float(qtyFilled) * price
 
-  data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
-  data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
-  data['avgSellPrice'] = data['totalSold']/data['totalQtySold']
-  print('DATA:', data)
+    data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
+    data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
+    data['avgSellPrice'] = data['totalSold']/data['totalQtySold']
+    print('DATA:', data)
+  except Exception as err:
+    print('err in runAnalytics', err)
