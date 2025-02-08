@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from dotenv import dotenv_values
 from urllib.request import Request, urlopen
 import tools, contracts, settings
+import asyncio
 
 config = {
   **dotenv_values(".env.shared"),
@@ -43,13 +44,29 @@ async def start():
 
     print("start=",datetime.fromtimestamp(start))
     print("end=",datetime.fromtimestamp(end))
-    url = signedApiUrl + "orders?pair=" + pairStr + "&category=3" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') #+ "&itemsperpage=20&pageno="+i
-    
-    req = Request(url)
-    req.add_header('x-signature', contracts.signature)
-    ordersJson = urlopen(req).read()
-    orders = json.loads(ordersJson)
-    print("orders:",orders)
-    if int(orders['count']) > 0:
-      ordersList.append(orders['rows'])
-  print("ordersList:",ordersList)
+    itemsperpage = 20
+    url = signedApiUrl + "orders?pair=" + pairStr + "&category=3" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+itemsperpage+"&pageno=1"
+    try:
+      req = Request(url)
+      req.add_header('x-signature', contracts.signature)
+      ordersJson = urlopen(req).read()
+      orders = json.loads(ordersJson)
+      # print("orders:",orders)
+      if int(orders['count']) > 0:
+        ordersList = ordersList + orders['rows']
+    except Exception as err:
+      print(err)
+    if orders['nbrof_rows'] > itemsperpage:
+      for x in range(1,math.ceil(orders['nbrof_rows']/itemsperpage)):
+        url = signedApiUrl + "orders?pair=" + pairStr + "&category=3" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+itemsperpage+"&pageno="+(x+1)
+        try:
+          req = Request(url)
+          req.add_header('x-signature', contracts.signature)
+          ordersJson = urlopen(req).read()
+          orders = json.loads(ordersJson)
+          if int(orders['count']) > 0:
+            ordersList = ordersList + orders['rows']
+        except Exception as err:
+          print(err)
+        await asyncio.sleep(0.1)
+  print("ordersList:",len(ordersList))
