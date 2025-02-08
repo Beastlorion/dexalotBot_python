@@ -4,6 +4,7 @@ from dotenv import dotenv_values
 from urllib.request import Request, urlopen
 import tools, contracts, settings
 import asyncio
+from pprint import pprint
 
 config = {
   **dotenv_values(".env.shared"),
@@ -90,7 +91,7 @@ def runAnalytics(ordersList):
     };
     for order in ordersList:
       qtyFilled = float(order['quantityfilled'])
-      price = float(data['price'])
+      price = float(order['price'])
       if order['side'] == 0:
         data['buyFills'] += 1
         data['totalCost'] += qtyFilled * price
@@ -106,6 +107,6 @@ def runAnalytics(ordersList):
     data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
     data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
     data['avgSellPrice'] = data['totalSold']/data['totalQtySold']
-    print('DATA:', data)
+    pprint(data)
   except Exception as err:
     print('err in runAnalytics', err)
