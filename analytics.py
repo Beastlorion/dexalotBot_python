@@ -57,6 +57,7 @@ async def start():
     except Exception as err:
       print('err in first orders pull in analytics', err)
     rows = int(ordersList[0]['nbrof_rows'])
+    print('orders filled:',rows)
     if rows > itemsperpage:
       for x in range(1,math.ceil(rows/itemsperpage)):
         url = signedApiUrl + "orders?pair=" + pairStr + "&category=1" + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno="+str(x+1)
@@ -69,5 +70,39 @@ async def start():
             ordersList = ordersList + orders['rows']
         except Exception as err:
           print(err)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
   print("ordersList:",len(ordersList))
+  runAnalytics(ordersList)
+
+def runAnalytics(ordersList):
+  data = {
+    'totalCost' : 0,
+    'totalSold' : 0,
+    'qtyOutstanding' : 0,
+    'totalQtyBought':0,
+    'totalQtySold':0,
+    'totalFees' : 0,
+    'buyFills' : 0,
+    'sellFills' : 0,
+    'totalVolumeBase': 0,
+    'totalVolumeQuote': 0
+  };
+  for order in ordersList:
+    qtyFilled = float(order['quantityfilled'])
+    price = float(data['price'])
+    if order['side'] == 0:
+      data['buyFills'] += 1
+      data['totalCost'] += qtyFilled * price
+      data['totalQtyBought'] += qtyFilled
+    else:
+      data['sellFills'] += 1
+      data['totalSold'] += qtyFilled * price
+      data['totalQtySold'] += qtyFilled
+    data['totalFees'] += float(order['totalfee']) * price
+    data['totalVolumeBase'] += float(qtyFilled)
+    data['totalVolumeQuote'] += float(qtyFilled) * price
+
+  data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
+  data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
+  data['avgSellPrice'] = data['totalSold']/data['totalQtySold']
+  print('DATA:', data)
