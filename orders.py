@@ -153,14 +153,14 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
     contracts.status = False
   contracts.activeOrders = []
   
-def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds, myAsks):
+def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks):
   try:
     orders = []
     availableFunds = availQuoteFunds
     bestAsk = contracts.bestAsk
     if (settings['pairType'] == 'volatile' and len(myAsks) > 0 and bestAsk == myAsks[0]['price']) and len(contracts.asks) > 1:
       bestAsk = contracts.asks[1][0]
-    for level in settings["levels"]:
+    for level in levels:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
@@ -181,14 +181,14 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
     print("ERROR DURING GENERATE BUY ORDERS:",error)
   return orders
 
-def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds, myBids):
+def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levels, levelsToUpdate, availBaseFunds, myBids):
   try:
     orders = []
     availableFunds = availBaseFunds
     bestBid = contracts.bestBid
     if (settings['pairType'] == 'volatile' and len(myBids) > 0 and bestBid == myBids[0]['price']) and len(contracts.bids) > 1:
       bestBid = contracts.bids[1][0]
-    for level in settings["levels"]:
+    for level in levels:
       retrigger = False
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
@@ -285,7 +285,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
   
     
 
-async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levelsToUpdate, takerBuy, takerSell, priorityGwei):
+async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levels, levelsToUpdate, takerBuy, takerSell, priorityGwei):
   global cancelReplaceCount, addOrderCount
   replaceOrders = []
   newOrders = []
@@ -349,8 +349,8 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     elif order['side'] == 1:
       availBaseFunds = availBaseFunds + order['qtyLeft']
       
-  buyOrders = generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levelsToUpdate, availQuoteFunds, myAsks)
-  sellOrders = generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levelsToUpdate, availBaseFunds, myBids)
+  buyOrders = generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks)
+  sellOrders = generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levels, levelsToUpdate, availBaseFunds, myBids)
   
   limit_orders = buyOrders + sellOrders
   
