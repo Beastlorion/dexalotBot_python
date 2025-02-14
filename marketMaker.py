@@ -77,9 +77,9 @@ async def orderUpdater(base,quote):
       level = len(levels)+1
       random_number = random.uniform(0.5, 1)
       qty = random_number * levels[0]['qty'] * .1
-      spread = levels[len(levels)-1]['spread'] + random_number/100
-      levels.append({"level":level,"spread":spread*0.9,"qty":qty,"refreshTolerance":spread})
-  
+      spread = levels[len(levels)-1]['spread'] + random_number
+      levels.append({"level":level,"spread":spread*0.9,"qty":qty,"refreshTolerance":spread, "lastUpdatePrice": 0})
+  print(levels)
   timeout = 30
   if 'timeout' in settings:
     timeout = settings['timeout']
