@@ -50,7 +50,7 @@ async def start():
     print("start=",datetime.fromtimestamp(start))
     print("end=",datetime.fromtimestamp(end))
     itemsperpage = 20
-    category = '3'
+    category = '1'
     url = signedApiUrl + "orders?pair=" + pairStr + "&category="+ category + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno=1"
     try:
       req = Request(url)
@@ -77,9 +77,9 @@ async def start():
           orders = json.loads(ordersJson)
           if int(orders['count']) > 0:
             ordersList = ordersList + orders['rows']
+          print(len(ordersList),rows)
         except Exception as err:
           print(err)
-        await asyncio.sleep(0.05)
   print("ordersList:",len(ordersList))
   runAnalytics(ordersList)
 
