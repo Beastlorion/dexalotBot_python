@@ -1,4 +1,4 @@
-import sys, os, asyncio, time, ast, aiohttp
+import sys, os, asyncio, time, ast, aiohttp, random
 import settings, tools, contracts, orders, price_feeds
 from dotenv import dotenv_values
 from decimal import *
@@ -53,6 +53,7 @@ async def start(net):
   await asyncio.sleep(2)
 
 async def orderUpdater(base,quote):
+  global activeOrders
   levels = []
   lastUpdatePrice = 0
   lastUpdateTime = 0
@@ -70,7 +71,14 @@ async def orderUpdater(base,quote):
     if level['refreshTolerance'] is None:
       level['refreshTolerance'] = settings['refreshTolerance']
     levels.append(level)
-  global activeOrders
+  
+  if 'fillerOrders' in settings:
+    for i in range(settings['fillerOrders']):
+      level = len(levels)+1
+      random_number = random.uniform(0.5, 1)
+      qty = random_number * levels[0]['qty'] * .1
+      spread = levels[len(levels)-1]['spread'] + random_number/100
+      levels.append({"level":level,"spread":spread*0.9,"qty":qty,"refreshTolerance":spread})
   
   timeout = 30
   if 'timeout' in settings:
