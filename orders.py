@@ -478,7 +478,7 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,set
     gas = len(limit_orders) * 700000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrderList(
       ordersToSend
-    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
+    ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1, 'gwei')})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
   except Exception as error:
