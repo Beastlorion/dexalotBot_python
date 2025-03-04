@@ -258,7 +258,7 @@ async def handleWebscokets(pairObj, testnet):
         req = Request(url)
         req.add_header('x-apikey', config['wsKey'])
         token = json.loads(urlopen(req).read())['token']
-        wsUrl = "wss://api.dexalot.com?wstoken=" + token
+        wsUrl = "wss://api.dexalot.com/api/ws?wstoken=" + token
 
       async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
