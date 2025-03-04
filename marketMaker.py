@@ -77,6 +77,8 @@ async def orderUpdater(base,quote):
       level = len(levels)+1
       random_number = random.uniform(0.5, 1)
       qty = random_number * levels[0]['qty'] * .1
+      if 'fillerSize' in settings:
+          qty = qty * settings['fillerSize']
       spread = levels[len(levels)-1]['spread'] + random_number
       levels.append({"level":level,"spread":spread,"qty":qty,"refreshTolerance":spread*.9, "lastUpdatePrice": 0})
   print(levels)

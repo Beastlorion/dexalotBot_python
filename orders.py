@@ -92,7 +92,7 @@ async def cancelOrderList(orderIDs, priorityGwei):
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
     gas = len(orderIDs) * 500000
-    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')});
+    contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1 + priorityGwei, 'gwei')});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
     cancelOrderCount = cancelOrderCount + len(orderIDs)

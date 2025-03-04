@@ -74,7 +74,7 @@ async def getTokenDetails(testnet):
 
 async def initializeProviders(market,settings, testnet):
 
-  rpc_url = config["fuji_rpc_url"] if testnet else config["rpc_url"]
+  rpc_url = config["fuji_rpc_url"] if testnet else config["dexalot_rpc_url"]
   contracts["SubNetProvider"] = {
     "provider": Web3(Web3.HTTPProvider(rpc_url)),
     "nonce": 0
