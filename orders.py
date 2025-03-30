@@ -320,13 +320,13 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   # availBaseFunds = float(contracts.contracts[base]["portfolioAvail"])
   # availQuoteFunds = float(contracts.contracts[quote]["portfolioAvail"])
   if settings['takerEnabled'] and not settings['autoTake']:
-    availBaseFunds = totalBaseFunds * .999 * (1 - settings['takerReserve']/100)
-    availQuoteFunds = totalQuoteFunds * .999 * (1 - settings['takerReserve']/100)
-    availTakerBaseFunds = totalBaseFunds * .999 * (settings['takerReserve']/100)
-    availTakerQuoteFunds = totalQuoteFunds * .999 * (settings['takerReserve']/100)
+    availBaseFunds = totalBaseFunds * .99 * (1 - settings['takerReserve']/100)
+    availQuoteFunds = totalQuoteFunds * .99 * (1 - settings['takerReserve']/100)
+    availTakerBaseFunds = totalBaseFunds * .99 * (settings['takerReserve']/100)
+    availTakerQuoteFunds = totalQuoteFunds * .99 * (settings['takerReserve']/100)
   else:
-    availBaseFunds = totalBaseFunds * .999
-    availQuoteFunds = totalQuoteFunds * .999
+    availBaseFunds = totalBaseFunds * .99
+    availQuoteFunds = totalQuoteFunds * .99
 
   if settings['takerEnabled'] and not settings['autoTake']:
     if takerSell:

@@ -111,7 +111,7 @@ async def orderUpdater(base,quote):
       if (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 or resetOrders or (settings['pairType'] == "stable" and contracts.retrigger)) and int(level['level']) > levelsToUpdate:
         levelsToUpdate = int(level['level'])
         if level['level'] == 1 and lastUpdatePrice != 0 and abs(level['lastUpdatePrice'] - marketPrice)/marketPrice > float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100:
-          newPriorityGwei = (abs(level['lastUpdatePrice'] - marketPrice)/marketPrice - (float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100)) * 10000 * settings['priorityGwei']
+          newPriorityGwei = round((abs(level['lastUpdatePrice'] - marketPrice)/marketPrice - (float(level["refreshTolerance"])/100 + settings['priorityGweiThreshold']/100)) * 10000 * settings['priorityGwei'],2)
           if newPriorityGwei > priorityGwei:
             priorityGwei = newPriorityGwei
     if failedCount > 0 and priorityGwei < lastPriorityGwei * 1.2:
