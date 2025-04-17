@@ -35,19 +35,15 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif quote == "USDT":
       tickerTask = asyncio.create_task(startTicker(client, bm, base, quote))
-    elif base == 'WBTC' and quote == "ETH":
-      tickerTask = asyncio.create_task(startTicker(client, bm, 'BTC', 'USDT'))
-      tickerTask = asyncio.create_task(startTicker(client, bm, 'ETH', 'USDT'))
     elif base == "USDT" and quote == "USDC":
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
   if settings['useBybitPrice']:
-    asyncio.create_task(bybitFeed(base, quote))
     if quote == "USDC":
-      client = await AsyncClient.create()
-      bm = BinanceSocketManager(client)
-      usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
+      asyncio.create_task(bybitFeed('USDC', 'USDT'))
+    if base != "USDT":
+      asyncio.create_task(bybitFeed(base, quote))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
   
@@ -181,28 +177,36 @@ async def bybitFeed (base,quote):
   if quote == "USDC":
     quote = "USDT"
     convert = True
+  if base == "WBTC":
+    base = "BTC"
     
   def handle_orderbook(message):
-    global bybitBids,bybitAsks,marketPrice,lastUpdate
+    global bybitBids,bybitAsks,marketPrice,lastUpdate,usdcUsdt
     try:
       if message['topic'] == "orderbook.50."+base+quote:
-        if time.time() - message['ts'] < 5:
-          buildBids = []
-          buildAsks = []
-          if convert and usdcUsdt != 0:
-            for bid in message['data']['b']:
-              buildBids.append([float(bid[0])/usdcUsdt,float(bid[1])])
-            for ask in message['data']['a']:
-              buildAsks.append([float(ask[0])/usdcUsdt,float(ask[1])])
-          else:
-            for bid in message['data']['b']:
-              buildBids.append([float(bid[0]),float(bid[1])])
-            for ask in message['data']['a']:
-              buildAsks.append([float(ask[0]),float(ask[1])])
-          bybitBids = sorted(buildBids, key=lambda tup: tup[0], reverse=True)
-          bybitAsks = sorted(buildAsks, key=lambda tup: tup[0])
-          marketPrice = (bybitBids[0][0] + bybitAsks[0][0])/2
-          lastUpdate = time.time()
+        if base == "USDC" and quote == "USDT":
+          #print('---------------',message['data']['b'],message['data']['a'])
+          usdcUsdt = (float(message['data']['b'][0][0]) + float(message['data']['a'][0][0]))/2
+          if globalBase == "USDT":
+            marketPrice = 1/usdcUsdt
+        else:
+          if time.time() - message['ts'] < 5:
+            buildBids = []
+            buildAsks = []
+            if convert and usdcUsdt != 0:
+              for bid in message['data']['b']:
+                buildBids.append([float(bid[0])/usdcUsdt,float(bid[1])])
+              for ask in message['data']['a']:
+                buildAsks.append([float(ask[0])/usdcUsdt,float(ask[1])])
+            else:
+              for bid in message['data']['b']:
+                buildBids.append([float(bid[0]),float(bid[1])])
+              for ask in message['data']['a']:
+                buildAsks.append([float(ask[0]),float(ask[1])])
+            bybitBids = sorted(buildBids, key=lambda tup: tup[0], reverse=True)
+            bybitAsks = sorted(buildAsks, key=lambda tup: tup[0])
+            marketPrice = (bybitBids[0][0] + bybitAsks[0][0])/2
+            lastUpdate = time.time()
     except Exception as error:
       print('error in handle_orderbook bybit:',error)
       
