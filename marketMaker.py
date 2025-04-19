@@ -19,9 +19,10 @@ base = tools.getSymbolFromName(market,0)
 quote = tools.getSymbolFromName(market,1)
 pairStr = base + '/' + quote
 pairByte32 = HexBytes(pairStr.encode('utf-8'))
+testnet = False
 
 async def start(net):
-  global pairObj
+  global pairObj, testnet
   testnet = net == 'fuji'
   
   if testnet:
@@ -33,7 +34,6 @@ async def start(net):
     return
   # print(pairObj)
   async with aiohttp.ClientSession() as s:
-    tasks = []
     tasks = [contracts.getDeployments("TradePairs",s, testnet),contracts.getDeployments("Portfolio",s, testnet),contracts.getDeployments("OrderBooks",s,testnet),contracts.getDeployments("PortfolioSubHelper",s,testnet)]
     res = await asyncio.gather(*tasks)
   await aiohttp.ClientSession().close()
@@ -154,7 +154,9 @@ async def orderUpdater(base,quote):
         lastPriorityGwei = priorityGwei
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
-        if failedCount >= 3:
+        if failedCount >= 2:
+          await contracts.initializeProviders(market,settings,testnet)
+          await contracts.initializeContracts(market,pairObj,testnet)
           contracts.reconnect = True
           await orders.cancelAllOrders(pairStr)
           await asyncio.sleep(2)
