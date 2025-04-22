@@ -154,20 +154,20 @@ async def orderUpdater(base,quote):
         lastPriorityGwei = priorityGwei
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
-        if failedCount >= 2:
+        if failedCount >= 1:
           await contracts.initializeProviders(market,settings,testnet)
           await contracts.initializeContracts(market,pairObj,testnet)
           contracts.reconnect = True
+          await contracts.refreshDexalotNonce()
           await orders.cancelAllOrders(pairStr)
           await asyncio.sleep(2)
           resetOrders = True
-        if failedCount > 5:
+        if failedCount > 3:
           print('5 failed transactions. Cancel all orders and shutdown')
           await orders.cancelAllOrders(pairStr)
           contracts.status = False
         contracts.refreshBalances = True
         # contracts.refreshActiveOrders = True
-        await contracts.refreshDexalotNonce()
         print("\n")
         continue 
     await asyncio.sleep(1)

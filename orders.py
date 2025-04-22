@@ -95,6 +95,7 @@ async def cancelOrderList(orderIDs, priorityGwei):
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1 + priorityGwei, 'gwei')});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    print("CANCEL ORDER LIST RESPONSE: ", response)
     cancelOrderCount = cancelOrderCount + len(orderIDs)
   except Exception as error:
     print("error in cancelOrderList", error)
@@ -141,17 +142,17 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
   await asyncio.sleep(1)
   openOrders = await getOpenOrders(pairStr)
   i = 0
-  while len(openOrders['rows'])>0 and i < 10:
-    orderIDs = []
-    for order in openOrders["rows"]:
-      orderIDs.append(order["id"])
-    await cancelOrderList(orderIDs,1)
-    await asyncio.sleep(10 + i * 10)
-    openOrders = await getOpenOrders(pairStr)
-    i = i + 1
-  if len(openOrders['rows'])>0:
-    contracts.status = False
-  contracts.activeOrders = []
+  #while len(openOrders['rows'])>0 and i < 1:
+  orderIDs = []
+  for order in openOrders["rows"]:
+    orderIDs.append(order["id"])
+  await cancelOrderList(orderIDs,1)
+  await asyncio.sleep(5)
+  openOrders = await getOpenOrders(pairStr)
+  #i = i + 1
+  #if len(openOrders['rows'])>0:
+    #contracts.status = False
+  #contracts.activeOrders = []
   
 def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks):
   try:
@@ -393,6 +394,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   
   addTx = False
   if len(newOrders) > 0:
+    await asyncio.sleep(0.1)
     addTx = True
     asyncio.create_task(addOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty,settings))
     addOrderCount = addOrderCount + len(newOrders)

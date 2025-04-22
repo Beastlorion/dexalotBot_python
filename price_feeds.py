@@ -42,7 +42,7 @@ async def startPriceFeed(market,settings):
   if settings['useBybitPrice']:
     if quote == "USDC":
       asyncio.create_task(bybitFeed('USDC', 'USDT'))
-    if base != "USDT":
+    if base != "USDT" and base!= "EURC":
       asyncio.create_task(bybitFeed(base, quote))
   
   # usdtUpdaterTask = asyncio.create_task(usdtUpdater())
@@ -133,6 +133,9 @@ async def getCustomPrice(base,quote):
           if (quote == "AVAX"):
             marketPrice = prices[base + '-AVAX']
             lastUpdate = time.time();
+          elif base == "EURC":
+            if usdcUsdt:
+              marketPrice = prices['EURC-USD']/usdcUsdt
           elif quote == "USDC":
             marketPrice = prices[base+ '-USDC']
             lastUpdate = time.time();
