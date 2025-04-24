@@ -166,7 +166,7 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,level,0)
         price = math.floor(marketPrice * (1 - spread) * pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
-        if price >= bestAsk and not settings['autoTake']:
+        if price >= bestAsk and ('autoTake' not in settings or not settings['autoTake']):
           price = math.floor((bestAsk * pow(10,pairObj["quotedisplaydecimals"])) - 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,0,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])
@@ -194,7 +194,7 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
       if int(level['level']) <= levelsToUpdate:
         spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,level,1)
         price = math.ceil(marketPrice * (1 + spread)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
-        if price <= bestBid and not settings['autoTake']:
+        if price <= bestBid and ('autoTake' not in settings or not settings['autoTake']):
           price = math.ceil((bestBid * pow(10,pairObj["quotedisplaydecimals"])) + 1)/pow(10,pairObj["quotedisplaydecimals"])
           retrigger = True
         qty = math.floor(tools.getQty(price,1,level,availableFunds,pairObj) * pow(10,pairObj["basedisplaydecimals"]))/pow(10,pairObj["basedisplaydecimals"])

@@ -17,17 +17,19 @@ bybitAsks = []
 lastUpdate = 0
 lastUpdateEth = 0
 globalBase = None
+marketSettings = None
 
 async def startPriceFeed(market,settings):
-  global globalBase
+  global globalBase, marketSettings
+  marketSettings = settings
   base = tools.getSymbolFromName(market,0)
   quote = tools.getSymbolFromName(market,1)
   globalBase = base
-  if settings['useVolSpread']:
+  if marketSettings['useVolSpread']:
     asyncio.create_task(getVolSpread(base,quote))
-  if settings['useCustomPrice']:
+  if marketSettings['useCustomPrice']:
     asyncio.create_task(getCustomPrice(base,quote))
-  elif not settings['useBybitPrice']:
+  elif not marketSettings['useBybitPrice']:
     client = await AsyncClient.create()
     bm = BinanceSocketManager(client)
     if quote == "USDC" and base != "EUROC" and base != "USDT":
@@ -39,7 +41,7 @@ async def startPriceFeed(market,settings):
       usdc_usdtTickerTask = asyncio.create_task(usdc_usdtTicker(client, bm, base, quote))
     elif base == "sAVAX":
       savaxTickerTask = asyncio.create_task(savaxFeed())
-  if settings['useBybitPrice']:
+  if marketSettings['useBybitPrice']:
     if quote == "USDC":
       asyncio.create_task(bybitFeed('USDC', 'USDT'))
     if base != "USDT" and base!= "EURC":
@@ -168,14 +170,25 @@ async def getVolSpread(base,quote):
       
 async def bybitFeed (base,quote):
   print('starting bybit websockets')
-  ws = WebSocket(
-    testnet=False,
-    channel_type="spot",
-    ping_interval=10,
-    ping_timeout=5,
-    retries=0,
-    restart_on_error=True
-  )
+  if 'perps' in marketSettings and marketSettings['perps'] == True:
+    ws = WebSocket(
+      testnet=False,
+      channel_type="linear",
+      ping_interval=10,
+      ping_timeout=5,
+      retries=0,
+      restart_on_error=True
+    )
+  else: 
+    ws = WebSocket(
+      testnet=False,
+      channel_type="spot",
+      ping_interval=10,
+      ping_timeout=5,
+      retries=0,
+      restart_on_error=True
+    )
+
   convert = False
   if quote == "USDC":
     quote = "USDT"
