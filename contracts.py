@@ -403,6 +403,8 @@ async def handleWebscokets(pairObj, testnet):
                 orderIDsToCancel.append(data['orderId'])
           except websockets.ConnectionClosed:
             break
+          except websockets.ConnectionClosedError:
+            break
           except Exception as error:
             if parsed['type'] == "orderStatusUpdateEvent":
               print("FAILED ORDER TRACKING:", parsed['data'], error)
