@@ -38,7 +38,7 @@ async def start(net):
     res = await asyncio.gather(*tasks)
   await aiohttp.ClientSession().close()
     
-  await contracts.initializeProviders(market,settings,testnet)
+  await contracts.initializeProviders(market,settings,testnet,base)
   await contracts.initializeContracts(market,pairObj,testnet)
 
   contracts.getRates(pairObj,pairByte32)
@@ -155,7 +155,7 @@ async def orderUpdater(base,quote):
         contracts.pendingTransactions = []
         failedCount = failedCount + 1
         if failedCount >= 1:
-          await contracts.initializeProviders(market,settings,testnet)
+          await contracts.initializeProviders(market,settings,testnet,base)
           await contracts.initializeContracts(market,pairObj,testnet)
           contracts.reconnect = True
           await contracts.refreshDexalotNonce()
