@@ -203,7 +203,7 @@ async def initializeContracts(market,pairObj,testnet):
       elif item['env'] == "production-multi-arb" or (testnet and item['env'] == "fuji-multi-arb" and item["subnet_symbol"] != "ALOT"):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
-      elif item['env'] == "production-multi-base" or (testnet and item['env'] == "fuji-multi-base" and item["subnet_symbol"] != "ALOT") and base in ['TOSHI','ETH']:
+      elif (item['env'] == "production-multi-base" or (testnet and item['env'] == "fuji-multi-base" and item["subnet_symbol"] != "ALOT")) and base in ['TOSHI','ETH']:
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BaseProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
     elif item["subnet_symbol"] == "AVAX":
