@@ -72,7 +72,7 @@ async def getTokenDetails(testnet):
   tokenDetails = json.loads(urllib.request.urlopen(url).read())
   return tokenDetails
 
-async def initializeProviders(market,settings, testnet):
+async def initializeProviders(market,settings, testnet, base):
   global address, signature
 
   if len(settings['secret_name'])>0:
@@ -129,18 +129,19 @@ async def initializeProviders(market,settings, testnet):
   except Exception as error:
     print('error setting arbitrum provider:', error)
     
-  try:
-    contracts["BaseProvider"] = {
-    "provider": Web3(Web3.HTTPProvider(config["base_rpc_url"])),
-    "nonce": 0
-    }
-    contracts["BaseProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-    contracts["BaseProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
-    contracts["BaseProvider"]["provider"].eth.default_account = account.address
-    contracts["BaseProvider"]["provider"].strict_bytes_type_checking = False
-    contracts["BaseProvider"]["nonce"] = contracts["BaseProvider"]["provider"].eth.get_transaction_count(address)
-  except Exception:
-    print('error setting base provider:', error)
+  if base in ['TOSHI', 'ETH']:
+    try:
+      contracts["BaseProvider"] = {
+      "provider": Web3(Web3.HTTPProvider(config["base_rpc_url"])),
+      "nonce": 0
+      }
+      contracts["BaseProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+      contracts["BaseProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
+      contracts["BaseProvider"]["provider"].eth.default_account = account.address
+      contracts["BaseProvider"]["provider"].strict_bytes_type_checking = False
+      contracts["BaseProvider"]["nonce"] = contracts["BaseProvider"]["provider"].eth.get_transaction_count(address)
+    except Exception:
+      print('error setting base provider:', error)
   print('finished initializeProviders')
   
 async def initializeContracts(market,pairObj,testnet):
@@ -513,7 +514,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    if base != "ALOT" and base != "AVAX":
+    if base in ['TOSHI', 'ETH']:
       decimals = contracts[base]["tokenDetails"]["evmdecimals"]
       baseShift = 'ether'
       match decimals:
@@ -521,8 +522,8 @@ def getBalances(base, quote, pairObj):
           baseShift = "lovelace"
         case 8:
           baseShift = "8_dec"
-      basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
-      contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
+      # basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
+      # contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
       
       baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
       contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
