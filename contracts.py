@@ -411,8 +411,11 @@ async def handleWebscokets(pairObj, testnet):
               print("FAILED ORDER TRACKING:", parsed['data'], error)
               status = False
             continue
-        asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
-        asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
+        try:
+          asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
+          asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
+        except Exception as error:
+          print('error closing websockets:',error)
         await asyncio.sleep(0.05)
     except Exception as error:
       print('error during handleWebscokets:',error)
