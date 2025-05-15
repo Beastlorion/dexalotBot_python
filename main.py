@@ -10,24 +10,31 @@ client = {}
 marketID = None
 
 async def main():
-  if len(sys.argv) > 2 and sys.argv[2] == "analytics":
-    await analytics.start()      
-  else:
-    try:
-      net = 'm'
-      if sys.argv == 2 and sys.argv[2] == "fuji":
-        net = 'fuji'
-      await marketMaker.start(net)
-    except asyncio.CancelledError:
-      print("asyncio.CancelledError")
-    except KeyboardInterrupt:
-      print("KeyboardInterrupt")
-    except Exception as error:
-      print("main error:",error)
-    finally:
-      print("CANCELLING ORDERS AND SHUTTING DOWN")
-      contracts.status = False
-      await orders.cancelAllOrders(marketMaker.pairStr, True)
+  x = True
+  while x is True:
+    x = False
+    if len(sys.argv) > 2 and sys.argv[2] == "analytics":
+      await analytics.start()      
+    else:
+      try:
+        net = 'm'
+        if sys.argv == 2 and sys.argv[2] == "fuji":
+          net = 'fuji'
+        await marketMaker.start(net)
+      except asyncio.CancelledError:
+        print("asyncio.CancelledError")
+        x = True
+        continue
+      except KeyboardInterrupt:
+        print("KeyboardInterrupt")
+      except Exception as error:
+        print("main error:",error)
+        x = True
+        continue
+      finally:
+        print("CANCELLING ORDERS AND SHUTTING DOWN")
+        contracts.status = False
+        await orders.cancelAllOrders(marketMaker.pairStr, True)
 
 # Start and run until complete
 # loop = asyncio.get_event_loop()
