@@ -24,10 +24,8 @@ async def start():
 
   apiUrl = config["apiUrl"]
   pairObj = await tools.getPairObj(pairStr,apiUrl)
-  
-  await contracts.initializeProviders(market,settings,False)
+  await contracts.initializeProviders(market,settings,False, base)
   signedApiUrl = config["signedApiUrl"]
-
   startDate = int(datetime.utcnow().timestamp()) - 604800
   endDate = int(datetime.utcnow().timestamp())
   if len(sys.argv) > 4:
@@ -132,7 +130,7 @@ def getDataFromFiles():
     all_records = []
 
     # Regex pattern to extract date (YYYYMM) from filenames
-    filename_pattern = re.compile(r""+base.lower()+"_[a-z]+_(\d{6})\.csv")
+    filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
 
     # Iterate through files in the directory
     for filename in os.listdir(directory):
