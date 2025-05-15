@@ -529,21 +529,20 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    if base in ['TOSHI', 'ETH']:
-      decimals = contracts[base]["tokenDetails"]["evmdecimals"]
-      baseShift = 'ether'
-      match decimals:
-        case 6:
-          baseShift = "lovelace"
-        case 8:
-          baseShift = "8_dec"
-      # basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
-      # contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
-      
-      baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
-      contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
-      contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
-      # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
+    decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+    baseShift = 'ether'
+    match decimals:
+      case 6:
+        baseShift = "lovelace"
+      case 8:
+        baseShift = "8_dec"
+    # basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
+    # contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
+    
+    baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
+    contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
+    contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
+    # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
       decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
