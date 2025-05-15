@@ -23,18 +23,18 @@ async def main():
         await marketMaker.start(net)
       except asyncio.CancelledError:
         print("asyncio.CancelledError")
-        x = True
         await asyncio.sleep(15)
         continue
       except KeyboardInterrupt:
         print("KeyboardInterrupt")
+        x = False
       except Exception as error:
         print("main error:",error)
-        x = True
         await asyncio.sleep(15)
         continue
       finally:
         print("CANCELLING ORDERS AND SHUTTING DOWN")
+        x = False
         contracts.status = False
         await orders.cancelAllOrders(marketMaker.pairStr, True)
 
