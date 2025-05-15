@@ -271,8 +271,8 @@ async def handleWebscokets(pairObj, testnet):
         req = Request(url)
         req.add_header('x-apikey', config['wsKey'])
         token = json.loads(urlopen(req).read())['token']
-        wsUrl = "wss://api.dexalot.com/api/ws?wstoken=" + token
-        #wsUrl = "wss://api.dexalot.com?wstoken=" + token
+        #wsUrl = "wss://api.dexalot.com/api/ws?wstoken=" + token
+        wsUrl = "wss://api.dexalot.com?wstoken=" + token
 
       async with websockets.connect(wsUrl) as websocket:
         await websocket.send(json.dumps(subscribeBook))
@@ -411,11 +411,8 @@ async def handleWebscokets(pairObj, testnet):
               print("FAILED ORDER TRACKING:", parsed['data'], error)
               status = False
             continue
-        try:
-          asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
-          asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        except Exception as error:
-          print('error closing websockets:',error)
+        asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
+        asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(0.05)
     except Exception as error:
       print('error during handleWebscokets:',error)
@@ -495,7 +492,7 @@ def newPendingTx(purpose,orders = []):
   pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
 
 def getBalances(base, quote, pairObj):
-  global refreshBalances, baseShift, quoteShift
+  global refreshBalances, baseShift, quoteShift, status
   portfolio = contracts["PortfolioSub"]["deployedContract"]
   
   try:
@@ -510,27 +507,43 @@ def getBalances(base, quote, pairObj):
     alotC = contracts["ALOT"]["deployedContract"].functions.balanceOf(address).call()
     contracts["ALOT"]["mainnetBal"] = Web3.from_wei(alotC, 'ether')
     
-    alotD = portfolio.functions.getBalance(address, "AVAX".encode('utf-8')).call()
-    contracts["AVAX"]["portfolioTot"] = Web3.from_wei(alotD[0], 'ether')
-    contracts["AVAX"]["portfolioAvail"] = Web3.from_wei(alotD[1], 'ether')
+    alotD = portfolio.functions.getBalance(address, "ALOT".encode('utf-8')).call()
+    contracts["ALOT"]["portfolioTot"] = Web3.from_wei(alotD[0], 'ether')
+    contracts["ALOT"]["portfolioAvail"] = Web3.from_wei(alotD[1], 'ether')
+
+    alotGas = contracts["SubNetProvider"]["provider"].eth.get_balance(address)
+    alotGas = Web3.from_wei(alotGas, 'ether')
+    print('alotGas:', alotGas)
+    if alotGas < 15 and contracts["ALOT"]["portfolioAvail"] > 100:
+      print('adding 100 alot gas')
+      contract_data = portfolio.functions.withdrawNative(
+        address,
+        Web3.to_wei(100, 'ether')
+      ).build_transaction({'nonce':getSubnetNonce(),'gas':500000,'maxFeePerGas':Web3.to_wei(20, 'gwei')})
+      incrementNonce()
+      contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    elif contracts["ALOT"]["portfolioAvail"] < 100:
+      print("OUT OF GAS AND ALOT IN PORTFOLIO")
+      status = False
     
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    decimals = contracts[base]["tokenDetails"]["evmdecimals"]
-    baseShift = 'ether'
-    match decimals:
-      case 6:
-        baseShift = "lovelace"
-      case 8:
-        baseShift = "8_dec"
-    # basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
-    # contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
-    
-    baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
-    contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
-    contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
-    #print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
+    if base in ['TOSHI', 'ETH']:
+      decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+      baseShift = 'ether'
+      match decimals:
+        case 6:
+          baseShift = "lovelace"
+        case 8:
+          baseShift = "8_dec"
+      # basec = contracts[base]["deployedContract"].functions.balanceOf(address).call()
+      # contracts[base]["mainnetBal"] = Web3.from_wei(basec, baseShift)
+      
+      baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
+      contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
+      contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
+      # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
       decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
@@ -546,7 +559,7 @@ def getBalances(base, quote, pairObj):
       quoteD = portfolio.functions.getBalance(address, quote.encode('utf-8')).call()
       contracts[quote]["portfolioTot"] = Web3.from_wei(quoteD[0], quoteShift)
       contracts[quote]["portfolioAvail"] = Web3.from_wei(quoteD[1], quoteShift)
-      #print("BALANCES:",quote,contracts[quote]["mainnetBal"], contracts[quote]["portfolioTot"], contracts[quote]["portfolioAvail"])
+      # print("BALANCES:",quote,contracts[quote]["mainnetBal"], contracts[quote]["portfolioTot"], contracts[quote]["portfolioAvail"])
   except Exception as error:
     print("error in getBalances:", error)
   print("finished getting balances:",time.time())
