@@ -27,7 +27,6 @@ async def main():
         continue
       except KeyboardInterrupt:
         print("KeyboardInterrupt")
-        x = False
       except Exception as error:
         print("main error:",error)
         await asyncio.sleep(15)
