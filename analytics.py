@@ -81,7 +81,7 @@ async def start():
   print("ordersList:",len(ordersList))
   runAnalytics(ordersList)
 
-def runAnalytics(ordersList):
+def runAnalytics(ordersList,startTime):
   try:
     data = {
       'totalCost' : 0,
@@ -95,8 +95,12 @@ def runAnalytics(ordersList):
       'totalVolumeBase': 0,
       'totalVolumeQuote': 0
     };
+    if len(sys.argv) > 4 and not startTime:
+      startDate = int(sys.argv[4])
+    elif startTime:
+      startDate = startTime
     for order in ordersList:
-      if order['id'] == "0xf82ab7d84f27d8d2e7a6b2859b3f7835550e14f0cf10ea2ae00c500000000000":
+      if order['id'] == "0xf82ab7d84f27d8d2e7a6b2859b3f7835550e14f0cf10ea2ae00c500000000000" or order['ts'] < startDate:
         continue
       qtyFilled = float(order['quantityfilled'])
       totalAmount = float(order['totalamount'])
@@ -164,8 +168,11 @@ def getDataFromFiles():
     # Sort all records by date
     all_records.sort(key=lambda x: x['ts'])
 
+    startDate = '1'
+    if len(sys.argv) > 4:
+      startDate = formatted_time = datetime.fromtimestamp(int(sys.argv[4]), tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S+00')
     # Print or use the sorted data
-    runAnalytics(all_records)
+    runAnalytics(all_records, startDate)
   except Exception as err:
     print('error in getData from files:', err)
   sys.exit()
