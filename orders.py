@@ -444,7 +444,8 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
       ordersToReplace
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
     contracts.incrementNonce()
-    await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    a = await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    print('replaceOrderList RESPONSE:',time.time())
     return
   except Exception as error:
     print('error in replaceOrderList:', error)
@@ -477,7 +478,7 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,set
   print('Add order list - ', len(limit_orders))
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
-    gas = len(limit_orders) * 700000
+    gas = len(limit_orders) * 1000000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrderList(
       ordersToSend
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1, 'gwei')})

@@ -205,7 +205,7 @@ async def bybitFeed (base,quote):
           usdcUsdt = (float(message['data']['b'][0][0]) + float(message['data']['a'][0][0]))/2
           if globalBase == "USDT":
             marketPrice = 1/usdcUsdt
-        else:
+        elif base != 'USDT':
           if time.time() - message['ts'] < 5:
             buildBids = []
             buildAsks = []
