@@ -522,7 +522,7 @@ def getBalances(base, quote, pairObj):
       ).build_transaction({'nonce':getSubnetNonce(),'gas':500000,'maxFeePerGas':Web3.to_wei(20, 'gwei')})
       incrementNonce()
       contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-    elif contracts["ALOT"]["portfolioAvail"] < 100:
+    elif alotGas < 15 and contracts["ALOT"]["portfolioAvail"] < 100:
       print("OUT OF GAS AND ALOT IN PORTFOLIO")
       status = False
     
@@ -542,7 +542,7 @@ def getBalances(base, quote, pairObj):
     baseD = portfolio.functions.getBalance(address, base.encode('utf-8')).call()
     contracts[base]["portfolioTot"] = Web3.from_wei(baseD[0], baseShift)
     contracts[base]["portfolioAvail"] = Web3.from_wei(baseD[1], baseShift)
-    # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
+    #print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
       decimals = contracts[quote]["tokenDetails"]["evmdecimals"]

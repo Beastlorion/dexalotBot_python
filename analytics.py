@@ -79,7 +79,7 @@ async def start():
         except Exception as err:
           print(err)
   print("ordersList:",len(ordersList))
-  runAnalytics(ordersList)
+  runAnalytics(ordersList,'0')
 
 def runAnalytics(ordersList,startTime):
   try:
