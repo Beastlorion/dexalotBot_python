@@ -277,7 +277,7 @@ class MarketMaker:
                     threshold = tolerance + self.market_settings['priorityGweiThreshold'] / 100
                     if price_change > threshold:
                         urgency = price_change - threshold
-                        new_priority = urgency * 10000 * self.market_settings['priorityGwei']
+                        new_priority = urgency * self.market_settings['priorityGwei']
                         priority_gwei = max(priority_gwei, round(new_priority, 2))
         
         # Handle failed transaction escalation
