@@ -23,6 +23,7 @@ class BotManager:
     def __init__(self):
         self.shutdown_requested = False
         self.keyboard_interrupt = False
+        self.shutdown_event = asyncio.Event()
         
     def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown."""
@@ -31,6 +32,10 @@ class BotManager:
             self.shutdown_requested = True
             if signum == signal.SIGINT:
                 self.keyboard_interrupt = True
+            # Immediately stop all loops by setting contracts.status to False
+            contracts.status = False
+            # Set the shutdown event to wake up any waiting tasks
+            self.shutdown_event.set()
                 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -68,7 +73,7 @@ class BotManager:
         while not self.shutdown_requested:
             try:
                 logger.info(f"Starting market maker on network: {network}")
-                await marketMaker.start(network)
+                await marketMaker.start(network, self.shutdown_event)
                 
                 # If we reach here, the market maker completed normally
                 # Check if it was a graceful shutdown
@@ -82,13 +87,22 @@ class BotManager:
                     break
                     
                 logger.info(f"Market maker stopped, restarting in {restart_delay}s...")
-                await asyncio.sleep(restart_delay)
+                # Check for shutdown more frequently during restart delay
+                try:
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=restart_delay)
+                    break  # Shutdown event was set
+                except asyncio.TimeoutError:
+                    pass  # Continue with restart
                 
             except asyncio.CancelledError:
                 logger.info("Market maker cancelled")
                 if not self.shutdown_requested:
-                    await asyncio.sleep(restart_delay)
-                    continue
+                    # Check for shutdown more frequently during restart delay
+                    try:
+                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=restart_delay)
+                        break  # Shutdown event was set
+                    except asyncio.TimeoutError:
+                        continue
                 break
                 
             except KeyboardInterrupt:
@@ -104,7 +118,12 @@ class BotManager:
                     break
                 
                 logger.info(f"Restarting in {restart_delay}s...")
-                await asyncio.sleep(restart_delay)
+                # Check for shutdown more frequently during restart delay
+                try:
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=restart_delay)
+                    break  # Shutdown event was set
+                except asyncio.TimeoutError:
+                    pass  # Continue with restart
         
         # Perform cleanup
         if hasattr(marketMaker, 'pairStr'):

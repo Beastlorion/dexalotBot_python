@@ -26,10 +26,11 @@ logger = logging.getLogger(__name__)
 class MarketMaker:
     """Main market maker class with improved structure."""
     
-    def __init__(self, market: str, network: str = 'm'):
+    def __init__(self, market: str, network: str = 'm', shutdown_event: asyncio.Event = None):
         self.market = market
         self.network = network
         self.testnet = network == 'fuji'
+        self.shutdown_event = shutdown_event or asyncio.Event()
         
         # Market data
         self.pair_obj: Optional[Dict] = None
@@ -59,6 +60,7 @@ class MarketMaker:
         """Request graceful shutdown."""
         self.shutdown_requested = True
         contracts.status = False
+        self.shutdown_event.set()
         logger.info("Shutdown requested")
     
     async def initialize(self):
@@ -153,23 +155,35 @@ class MarketMaker:
         
         logger.info('Starting order updater')
         
-        while not self.shutdown_requested and contracts.status:
+        while not self.shutdown_requested and contracts.status and not self.shutdown_event.is_set():
             try:
                 # Check data freshness
                 if not self._is_data_fresh(timeout):
                     logger.warning("Market data is stale, waiting...")
-                    await asyncio.sleep(1)
-                    continue
+                    # Use shutdown event for more responsive shutdown
+                    try:
+                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=1.0)
+                        break  # Shutdown event was set
+                    except asyncio.TimeoutError:
+                        continue
                 
                 market_price = self._get_adjusted_market_price()
                 
                 if not self._is_market_data_ready(market_price):
                     logger.info("Waiting for market data...")
-                    await asyncio.sleep(2)
-                    continue
+                    # Use shutdown event for more responsive shutdown
+                    try:
+                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=2.0)
+                        break  # Shutdown event was set
+                    except asyncio.TimeoutError:
+                        continue
                 
                 # Handle pending operations
                 await self._handle_pending_operations()
+                
+                # Check for shutdown after each major operation
+                if self.shutdown_requested or not contracts.status or self.shutdown_event.is_set():
+                    break
                 
                 # Determine what needs updating
                 levels_to_update, priority_gwei = self._calculate_updates(
@@ -194,7 +208,12 @@ class MarketMaker:
                         reset_orders = await self._handle_failed_update(last_priority_gwei, priority_gwei)
                         last_priority_gwei = priority_gwei
                 
-                await asyncio.sleep(1)
+                # Use shutdown event for more responsive shutdown
+                try:
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=1.0)
+                    break  # Shutdown event was set
+                except asyncio.TimeoutError:
+                    pass  # Continue with next iteration
                 
             except KeyboardInterrupt:
                 logger.info("KeyboardInterrupt received in order updater, initiating graceful shutdown")
@@ -210,7 +229,12 @@ class MarketMaker:
                     self.request_shutdown()
                     break
                 
-                await asyncio.sleep(1)
+                # Use shutdown event for more responsive shutdown
+                try:
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=1.0)
+                    break  # Shutdown event was set
+                except asyncio.TimeoutError:
+                    pass  # Continue with next iteration
         
         logger.info("Order updater stopped")
     
@@ -414,14 +438,14 @@ market = sys.argv[1] if len(sys.argv) > 1 else None
 pairStr = None
 market_maker_instance = None  # Global instance for main.py to access
 
-async def start(net: str):
+async def start(net: str, shutdown_event: asyncio.Event = None):
     """Legacy start function for backward compatibility."""
     global pairObj, pairStr, market_maker_instance
     
     if not market:
         raise ValueError("Market not specified")
     
-    market_maker_instance = MarketMaker(market, net)
+    market_maker_instance = MarketMaker(market, net, shutdown_event)
     pairStr = market_maker_instance.pair_str
     pairObj = market_maker_instance.pair_obj
     
