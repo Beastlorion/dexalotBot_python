@@ -1,8 +1,21 @@
-import sys, os, asyncio, time, ast, json
+#!/usr/bin/env python3
+"""
+Blockchain contracts and provider management for Dexalot Bot.
+Handles Web3 connections, contract interactions, and blockchain state.
+"""
+
+import sys
+import asyncio
+import time
+import json
+import logging
 from hexbytes import HexBytes
+from typing import Dict, Any, Optional
+
 import websockets
-import tools, orders
-from dotenv import dotenv_values
+import tools
+import orders
+from config import config
 import urllib.request
 from urllib.request import Request, urlopen
 from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
@@ -11,13 +24,18 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3.middleware import SignAndSendRawMiddlewareBuilder, ExtraDataToPOAMiddleware
 from eth_account.messages import encode_defunct
-ERC20ABIf = open('./ABIs/ERC20ABI.json')
-savaxABIf = open('./ABIs/savax_ABI.json')
 
-config = {
-    **dotenv_values(".env.shared"),
-    **dotenv_values(".env.secret")
-}
+logger = logging.getLogger(__name__)
+
+# Load ABIs
+try:
+    with open('./ABIs/ERC20ABI.json', 'r') as f:
+        ERC20ABI = json.load(f)
+    with open('./ABIs/savax_ABI.json', 'r') as f:
+        savaxABI = json.load(f)
+except Exception as e:
+    logger.error(f"Failed to load ABI files: {e}")
+    raise
 
 units.update(
     {
@@ -29,8 +47,7 @@ contracts = {}
 tokenDetails = None
 address = None
 signature = None
-ERC20ABI = json.load(ERC20ABIf)
-savaxABI = json.load(savaxABIf)
+# Global state variables
 nonce = 0
 status = True
 pendingTransactions = []
@@ -55,7 +72,7 @@ makerFilled = 0
 refreshOrderLevel = False
 
 async def getDeployments(dt, s, testnet):
-  apiUrl = config['fuji_apiUrl'] if testnet else config["apiUrl"]
+  apiUrl = config.get_api_url("fuji" if testnet else "mainnet")
   url = apiUrl + "deployment?contracttype=" + dt + "&returnabi=true"
   # contract = urllib.request.urlopen(url).read()
   # contract = json.loads(contract)
@@ -67,82 +84,88 @@ async def getDeployments(dt, s, testnet):
       contracts[item["contract_name"]] = item
 
 async def getTokenDetails(testnet):
-  apiUrl = config["fuji_apiUrl"] if testnet else config["apiUrl"]
+  apiUrl = config.get_api_url("fuji" if testnet else "mainnet")
   url = apiUrl + "tokens/"
   tokenDetails = json.loads(urllib.request.urlopen(url).read())
   return tokenDetails
 
-async def initializeProviders(market,settings, testnet, base):
-  global address, signature
+async def initializeProviders(market: str, settings: Dict, testnet: bool, base: str):
+    """Initialize blockchain providers with improved error handling."""
+    global address, signature
 
-  if len(settings['secret_name'])>0:
-    private_key = tools.getPrivateKey(market,settings)
-  else:
-    private_key = config[market+"_pk"]
-  assert private_key is not None, "You must set PRIVATE_KEY environment variable"
-  assert private_key.startswith("0x"), "Private key must start with 0x hex prefix"
-
-  account: LocalAccount = Account.from_key(private_key)
-  address = account.address
-  
-
-
-  rpc_url = config["fuji_rpc_url"] if testnet else config["dexalot_rpc_url"]
-  contracts["SubNetProvider"] = {
-    "provider": Web3(Web3.HTTPProvider(rpc_url)),
-    "nonce": 0
-  }
-  contracts["SubNetProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-  contracts["SubNetProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
-  contracts["SubNetProvider"]["provider"].eth.default_account = account.address
-  contracts["SubNetProvider"]["provider"].strict_bytes_type_checking = False
-  contracts["SubNetProvider"]["nonce"] = contracts["SubNetProvider"]["provider"].eth.get_transaction_count(address)
-
-  message = encode_defunct(text="dexalot")
-  signedMessage = contracts["SubNetProvider"]["provider"].eth.account.sign_message(message, private_key=private_key)
-  signature = address + ':0x' + signedMessage.signature.hex()
-
-  try:
-    avaxc_rpc_url = config["fuji_avaxc_rpc_url"] if testnet else config["avaxc_rpc_url"]
-    contracts["AvaxcProvider"] = {
-      "provider": Web3(Web3.HTTPProvider(avaxc_rpc_url)),
-      "nonce": 0
-    }
-    contracts["AvaxcProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-    contracts["AvaxcProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
-    contracts["AvaxcProvider"]["provider"].eth.default_account = account.address
-    contracts["AvaxcProvider"]["provider"].strict_bytes_type_checking = False
-    contracts["AvaxcProvider"]["nonce"] = contracts["AvaxcProvider"]["provider"].eth.get_transaction_count(address)
-  except Exception as error:
-    print('error setting avaxc provider:', error)
-
-  try:
-    contracts["ArbProvider"] = {
-      "provider": Web3(Web3.HTTPProvider(config["arb_rpc_url"])),
-      "nonce": 0
-    }
-    contracts["ArbProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-    contracts["ArbProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
-    contracts["ArbProvider"]["provider"].eth.default_account = account.address
-    contracts["ArbProvider"]["provider"].strict_bytes_type_checking = False
-    contracts["ArbProvider"]["nonce"] = contracts["ArbProvider"]["provider"].eth.get_transaction_count(address)
-  except Exception as error:
-    print('error setting arbitrum provider:', error)
-    
-  if base in ['TOSHI', 'ETH']:
     try:
-      contracts["BaseProvider"] = {
-      "provider": Web3(Web3.HTTPProvider(config["base_rpc_url"])),
-      "nonce": 0
-      }
-      contracts["BaseProvider"]["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-      contracts["BaseProvider"]["provider"].middleware_onion.inject(SignAndSendRawMiddlewareBuilder.build(private_key),layer=0)
-      contracts["BaseProvider"]["provider"].eth.default_account = account.address
-      contracts["BaseProvider"]["provider"].strict_bytes_type_checking = False
-      contracts["BaseProvider"]["nonce"] = contracts["BaseProvider"]["provider"].eth.get_transaction_count(address)
-    except Exception:
-      print('error setting base provider:', error)
-  print('finished initializeProviders')
+        # Get private key
+        if len(settings.get('secret_name', '')) > 0:
+            private_key = tools.getPrivateKey(market, settings)
+        else:
+            private_key = config.get_private_key(market)
+        
+        account: LocalAccount = Account.from_key(private_key)
+        address = account.address
+        logger.info(f"Initialized account: {address}")
+
+        # Initialize subnet provider
+        rpc_url = config.get_rpc_url("fuji" if testnet else "mainnet", "subnet")
+        contracts["SubNetProvider"] = await _create_provider(rpc_url, private_key, account.address)
+        
+        # Create signature for API authentication
+        message = encode_defunct(text="dexalot")
+        signed_message = contracts["SubNetProvider"]["provider"].eth.account.sign_message(message, private_key=private_key)
+        signature = address + ':0x' + signed_message.signature.hex()
+
+        # Initialize AVAX-C provider
+        try:
+            avaxc_rpc_url = config.get_rpc_url("fuji" if testnet else "mainnet", "avaxc")
+            contracts["AvaxcProvider"] = await _create_provider(avaxc_rpc_url, private_key, account.address)
+            logger.info("AVAX-C provider initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize AVAX-C provider: {e}")
+
+        # Initialize Arbitrum provider
+        if not testnet:  # Only for mainnet
+            try:
+                arb_rpc_url = config.get_rpc_url("mainnet", "arbitrum")
+                contracts["ArbProvider"] = await _create_provider(arb_rpc_url, private_key, account.address)
+                logger.info("Arbitrum provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Arbitrum provider: {e}")
+
+        # Initialize Base provider for specific tokens
+        if base in ['TOSHI', 'ETH'] and not testnet:
+            try:
+                base_rpc_url = config.get_rpc_url("mainnet", "base")
+                contracts["BaseProvider"] = await _create_provider(base_rpc_url, private_key, account.address)
+                logger.info("Base provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Base provider: {e}")
+
+        logger.info("Provider initialization complete")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize providers: {e}")
+        raise
+
+async def _create_provider(rpc_url: str, private_key: str, account_address: str) -> Dict:
+    """Create a Web3 provider with standard configuration."""
+    provider_config = {
+        "provider": Web3(Web3.HTTPProvider(rpc_url)),
+        "nonce": 0
+    }
+    
+    # Add middleware
+    provider_config["provider"].middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+    provider_config["provider"].middleware_onion.inject(
+        SignAndSendRawMiddlewareBuilder.build(private_key), layer=0
+    )
+    
+    # Configure provider
+    provider_config["provider"].eth.default_account = account_address
+    provider_config["provider"].strict_bytes_type_checking = False
+    
+    # Get nonce
+    provider_config["nonce"] = provider_config["provider"].eth.get_transaction_count(account_address)
+    
+    return provider_config
   
 async def initializeContracts(market,pairObj,testnet):
   base = tools.getSymbolFromName(market,0)
@@ -213,7 +236,7 @@ async def initializeContracts(market,pairObj,testnet):
       
       
 def signTransaction(provider,tx):
-  return provider.eth.account.sign_transaction(tx, private_key=config[market+"_pk"])
+  return provider.eth.account.sign_transaction(tx, private_key=config.get_private_key(market))
 
 async def refreshDexalotNonce():
   global nonce
@@ -238,18 +261,8 @@ def getRates(pairObj,pairByte32):
   print('Taker Rate BP:',takerRate)
   
 async def startDataFeeds(pairObj, testnet):
-  # block_filter = contracts["SubNetProvider"]["provider"].eth.filter('latest')
-  # a = asyncio.create_task(log_loop(block_filter, 0.5))
   c = asyncio.create_task(handleWebscokets(pairObj, testnet))
-  # d = asyncio.create_task(updateBalancesLoop(pairObj))
   await asyncio.gather(c)
-  
-# async def updateBalancesLoop(pairObj):
-#   while status:
-#     if (refreshBalances):
-#       await asyncio.to_thread(getBalances,pairObj['pair'].split('/')[0],pairObj['pair'].split('/')[1],pairObj)
-#     await asyncio.sleep(0.5)
-#   return
     
 async def handleWebscokets(pairObj, testnet):
   global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel
@@ -266,10 +279,10 @@ async def handleWebscokets(pairObj, testnet):
   while status:
     reconnect = False
     try:
-      if 'wsKey' in config and len(config['wsKey'])>1:
+      if 'wsKey' in config.all_config and len(config.get('wsKey', '')) > 1:
         url = 'https://api.dexalot.com/privapi/auth/getwstoken'
         req = Request(url)
-        req.add_header('x-apikey', config['wsKey'])
+        req.add_header('x-apikey', config.get('wsKey'))
         token = json.loads(urlopen(req).read())['token']
         #wsUrl = "wss://api.dexalot.com/api/ws?wstoken=" + token
         wsUrl = "wss://api.dexalot.com?wstoken=" + token
@@ -476,8 +489,6 @@ def handleEvents(event):
             if tx['purpose'] == 'replaceOrderList':
               replaceStatus = 2
             transactionsProcessed.append(tx)
-      # if tx['to'] == WETH_ADDRESS:
-      #     print(f'Found interaction with WETH contract! {tx}')
     for tx in transactionsProcessed:
       print("ACTIVE ORDERS:",activeOrders)
       pendingTransactions.remove(tx)

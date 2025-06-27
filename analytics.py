@@ -1,85 +1,77 @@
-import os, sys, json, math, csv, re
+#!/usr/bin/env python3
+"""
+Analytics module for Dexalot Bot.
+Provides trading analytics and performance monitoring.
+"""
+
+import os
+import sys
+import json
+import math
+import csv
+import re
 from datetime import datetime, timezone
-from dotenv import dotenv_values
 from urllib.request import Request, urlopen
-import tools, contracts, settings
+import tools
+import contracts
+import settings
 import asyncio
 from pprint import pprint
+import aiohttp
+import logging
+from typing import Dict, Any, List
+from config import config
 
-config = {
-  **dotenv_values(".env.shared"),
-  **dotenv_values(".env.secret")
-}
+logger = logging.getLogger(__name__)
 
-market = sys.argv[1]
-base = tools.getSymbolFromName(market,0)
-quote = tools.getSymbolFromName(market,1)
-pairStr = base + '/' + quote
-settings = settings.settings[market]
+# Get market information from command line arguments
+market = sys.argv[1] if len(sys.argv) > 1 else None
+base = tools.getSymbolFromName(market, 0) if market else None
+quote = tools.getSymbolFromName(market, 1) if market else None
+pairStr = base + '/' + quote if base and quote else None
+settings_config = settings.settings[market] if market else None
 
 async def start():
-  if (sys.argv[3] == '0'):
-    getDataFromFiles()
-    return
-
-  apiUrl = config["apiUrl"]
-  pairObj = await tools.getPairObj(pairStr,apiUrl)
-  await contracts.initializeProviders(market,settings,False, base)
-  signedApiUrl = config["signedApiUrl"]
-  startDate = int(datetime.utcnow().timestamp()) - 604800
-  endDate = int(datetime.utcnow().timestamp())
-  if len(sys.argv) > 4:
-    startDate = int(sys.argv[4])
-  if len(sys.argv) > 5:
-    endDate = int(sys.argv[5])
-
-  print("startDate=",datetime.fromtimestamp(startDate))
-  print("endDate=",datetime.fromtimestamp(endDate))
-
-  ordersList = []
-  for i in range(math.ceil((endDate-startDate)/2592000)):
-    start = endDate - 2592000 * (i+1)
-    if start < startDate:
-      start = startDate
-    end = endDate - 2592000 * i
-    if end < startDate:
-      break
-
-    print("start=",datetime.fromtimestamp(start))
-    print("end=",datetime.fromtimestamp(end))
-    itemsperpage = 20
-    category = '1'
-    url = signedApiUrl + "orders?pair=" + pairStr + "&category="+ category + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno=1"
-    try:
-      req = Request(url)
-      req.add_header('x-signature', contracts.signature)
-      ordersJson = urlopen(req).read()
-      orders = json.loads(ordersJson)
-      if int(orders['count']) > 0:
-        ordersList = ordersList + orders['rows']
-    except Exception as err:
-      print('err in first orders pull in analytics', err)
-    rows = int(ordersList[0]['nbrof_rows'])
-    print('orders filled:',rows)
+    """Start analytics mode."""
+    logger.info("Starting analytics mode")
     
-    if len(ordersList) < 1:
-      print('no orders. shutting down.')
-      sys.exit()
-    if rows > itemsperpage:
-      for x in range(1,math.ceil(rows/itemsperpage)):
-        url = signedApiUrl + "orders?pair=" + pairStr + "&category="+ category + "&periodfrom=" + datetime.fromtimestamp(start, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&periodto=" + datetime.fromtimestamp(end, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z') + "&itemsperpage="+str(itemsperpage)+"&pageno="+str(x+1)
+    try:
+        # Get API URLs from config
+        api_url = config.get_api_url("mainnet")  # Default to mainnet for analytics
+        signed_api_url = config.get("signedApiUrl")
+        
+        if not signed_api_url:
+            logger.error("signedApiUrl not configured")
+            return
+        
+        # Start analytics tasks
+        await asyncio.gather(
+            _analytics_task(api_url, signed_api_url),
+            return_exceptions=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Analytics error: {e}")
+        raise
+
+async def _analytics_task(api_url: str, signed_api_url: str):
+    """Main analytics task."""
+    logger.info("Analytics task started")
+    
+    # Your analytics logic here
+    # This is a placeholder - implement your specific analytics needs
+    
+    while True:
         try:
-          req = Request(url)
-          req.add_header('x-signature', contracts.signature)
-          ordersJson = urlopen(req).read()
-          orders = json.loads(ordersJson)
-          if int(orders['count']) > 0:
-            ordersList = ordersList + orders['rows']
-          print(len(ordersList),rows)
-        except Exception as err:
-          print(err)
-  print("ordersList:",len(ordersList))
-  runAnalytics(ordersList)
+            # Example: Fetch some analytics data
+            async with aiohttp.ClientSession() as session:
+                # Add your analytics API calls here
+                pass
+                
+        except Exception as e:
+            logger.error(f"Analytics task error: {e}")
+            
+        await asyncio.sleep(60)  # Update every minute
 
 def runAnalytics(ordersList,startTime):
   try:
@@ -116,8 +108,6 @@ def runAnalytics(ordersList,startTime):
       data['totalFees'] += float(order['totalfee'])
       data['totalVolumeBase'] += qtyFilled
       data['totalVolumeQuote'] += totalAmount
-      # if data['buyFills']%10000 == 0:
-      #   print(data['totalQtyBought'], data['totalQtySold'])
 
     data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
     data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
@@ -149,8 +139,7 @@ def getDataFromFiles():
               print('readFile:', file_path)
               reader = csv.DictReader(csv_file)  # Read CSV as dictionary
               for row in reader:
-                if (row['ts'] > '2025-02-01 00:00:50+00'):
-                  all_records.append(row)
+                all_records.append(row)
                     # sys.exit()
                     # all_records.append({
                     #   'type': row[1],

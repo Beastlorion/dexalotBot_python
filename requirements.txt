@@ -1,0 +1,26 @@
+# Dexalot Bot Dependencies
+# Web3 and blockchain interactions
+web3>=6.0.0
+eth-utils>=2.0.0
+eth-account>=0.8.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# HTTP and WebSocket clients
+aiohttp>=3.8.0
+websockets>=10.0
+
+# Exchange APIs
+python-binance>=1.0.0
+pybit>=5.0.0
+
+# Utilities
+shortuuid>=1.0.0
+
+# AWS (if using cloud features)
+boto3>=1.26.0
+
+# Data handling
+pandas>=1.5.0  # if used for analytics
+numpy>=1.24.0  # if used for calculations 

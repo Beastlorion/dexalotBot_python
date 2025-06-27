@@ -30,7 +30,7 @@ openOrders = None
 async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
   try:
-    signedApiUrl = config["fuji_signedApiUrl"] if testnet else config["signedApiUrl"]
+    signedApiUrl = config.get("fuji_signedApiUrl") if testnet else config.get("signedApiUrl")
     url = signedApiUrl + "orders?pair=" + pair + "&category=0"
     req = Request(url)
     req.add_header('x-signature', contracts.signature)
@@ -137,22 +137,15 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
-  await asyncio.sleep(3)
-  await contracts.refreshDexalotNonce()
-  await asyncio.sleep(1)
+  await asyncio.sleep(2)
   openOrders = await getOpenOrders(pairStr)
   i = 0
-  #while len(openOrders['rows'])>0 and i < 1:
   orderIDs = []
   for order in openOrders["rows"]:
     orderIDs.append(order["id"])
   await cancelOrderList(orderIDs,1)
-  await asyncio.sleep(5)
+  await asyncio.sleep(3)
   openOrders = await getOpenOrders(pairStr)
-  #i = i + 1
-  #if len(openOrders['rows'])>0:
-    #contracts.status = False
-  #contracts.activeOrders = []
   
 def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks):
   try:
