@@ -40,8 +40,16 @@ class BotManager:
         try:
             logger.info("Performing graceful shutdown...")
             contracts.status = False
+            
+            # Cancel all orders
             await orders.cancelAllOrders(market_pair, True)
             logger.info("All orders cancelled successfully")
+            
+            # Additional cleanup if market maker instance exists
+            if (hasattr(marketMaker, 'market_maker_instance') and 
+                marketMaker.market_maker_instance):
+                marketMaker.market_maker_instance.request_shutdown()
+                
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
     
@@ -81,6 +89,12 @@ class BotManager:
                 if not self.shutdown_requested:
                     await asyncio.sleep(restart_delay)
                     continue
+                break
+                
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt received in market maker loop")
+                self.shutdown_requested = True
+                self.keyboard_interrupt = True
                 break
                 
             except Exception as e:

@@ -196,6 +196,11 @@ class MarketMaker:
                 
                 await asyncio.sleep(1)
                 
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt received in order updater, initiating graceful shutdown")
+                self.request_shutdown()
+                break
+                
             except Exception as e:
                 logger.error(f"Error in order updater: {e}")
                 self.consecutive_failures += 1
@@ -337,7 +342,7 @@ class MarketMaker:
             if level['level'] <= levels_to_update:
                 level['lastUpdatePrice'] = self.last_update_price
         
-        logger.info("Order update successful\n")
+        # logger.info("Order update successful\n")
     
     async def _handle_failed_update(self, last_priority_gwei: float, 
                                   priority_gwei: float) -> bool:
@@ -383,6 +388,10 @@ class MarketMaker:
                 contracts.startDataFeeds(self.pair_obj, self.testnet),
                 self.run_order_updater()
             )
+            
+        except KeyboardInterrupt:
+            logger.info("KeyboardInterrupt received in market maker, initiating graceful shutdown")
+            self.request_shutdown()
             
         except Exception as e:
             logger.error(f"Market maker error: {e}")

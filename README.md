@@ -120,9 +120,11 @@ The refactored codebase follows a modular architecture:
 ## Key Improvements
 
 ### 🔄 Better Shutdown Handling
-- Graceful shutdown with order cancellation
-- Automatic restart unless interrupted by user (Ctrl+C)
-- Proper signal handling for clean exits
+- **Graceful shutdown** with order cancellation
+- **Automatic restart** unless interrupted by user (Ctrl+C)
+- **Proper signal handling** for clean exits
+- **KeyboardInterrupt support** - Ctrl+C triggers graceful shutdown
+- **Consecutive failure protection** - stops after 3 failures to prevent infinite loops
 
 ### 🏗️ Improved Architecture
 - Class-based design for better organization
@@ -134,6 +136,7 @@ The refactored codebase follows a modular architecture:
 - Retry logic with exponential backoff
 - Connection recovery for price feeds
 - Detailed error logging and monitoring
+- **Smart failure counting** - resets on success, stops after 3 consecutive failures
 
 ### ⚡ Performance Optimizations
 - Reduced sleep times in critical paths
