@@ -293,7 +293,8 @@ async def handleWebscokets(pairObj, testnet):
         print("dexalotOrderFeed and dexalotBookFeed START")
         while status and not reconnect:
           try:
-            message = str(await websocket.recv())
+            # Add timeout to make recv interruptible
+            message = str(await asyncio.wait_for(websocket.recv(), timeout=1.0))
             parsed = json.loads(message)
             
             if parsed['type'] == 'orderBooks':
@@ -415,6 +416,11 @@ async def handleWebscokets(pairObj, testnet):
               if clientOrderID not in activeOrderIDs and data['status'] in ['NEW','PARTIAL'] and data['type2Id'] == 3:
                 print(activeOrderIDs, clientOrderID)
                 orderIDsToCancel.append(data['orderId'])
+          except asyncio.TimeoutError:
+            # Timeout is normal - just check if we should shutdown
+            if not status:
+              break
+            continue
           except websockets.ConnectionClosed:
             break
           except websockets.ConnectionClosedError:

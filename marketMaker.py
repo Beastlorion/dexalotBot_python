@@ -249,9 +249,21 @@ class MarketMaker:
         return price_fresh and eth_fresh
     
     def _get_adjusted_market_price(self) -> float:
-        """Get market price with any configured adjustments."""
+        """Get market price with any configured adjustments and validation."""
         market_price = price_feeds.marketPrice
         
+        # Validate against order book if available (detect USDT/USDC confusion)
+        if contracts.bestBid > 0 and contracts.bestAsk > 0:
+            order_book_mid = (contracts.bestBid + contracts.bestAsk) / 2
+            price_ratio = market_price / order_book_mid if order_book_mid > 0 else 1
+            
+            # If price is significantly different from order book (>2x), use order book
+            if price_ratio > 2.0 or price_ratio < 0.5:
+                logger.warning(f"Price feed ({market_price:.4f}) differs significantly from order book ({order_book_mid:.4f})")
+                logger.warning(f"Using order book price instead")
+                market_price = order_book_mid
+        
+        # Apply price adjustment if configured
         if 'priceAdjust' in self.market_settings and self.market_settings['priceAdjust'] != 0:
             adjustment = 1 + float(self.market_settings['priceAdjust'] / 100)
             market_price *= adjustment

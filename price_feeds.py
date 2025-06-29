@@ -131,11 +131,16 @@ class PriceFeedManager:
             async with ts as tscm:
                 while contracts.status:
                     try:
-                        res = await tscm.recv()
+                        res = await asyncio.wait_for(tscm.recv(), timeout=1.0)
                         binance_price = (float(res["bids"][0][0]) + float(res['asks'][0][0])) / 2
                         
                         await self._process_binance_price(binance_price, symbol, quote, base)
                         
+                    except asyncio.TimeoutError:
+                        # Timeout is normal - just check if we should continue
+                        if not contracts.status:
+                            break
+                        continue
                     except Exception as e:
                         logger.error(f"Error processing Binance data: {e}")
                         await asyncio.sleep(1)
@@ -170,13 +175,18 @@ class PriceFeedManager:
             async with ts as tscm:
                 while contracts.status:
                     try:
-                        res = await tscm.recv()
+                        res = await asyncio.wait_for(tscm.recv(), timeout=1.0)
                         self.usdc_usdt = (float(res["bids"][0][0]) + float(res['asks'][0][0])) / 2
                         
                         if base == "USDT" and quote == "USDC":
                             self.market_price = 1 / self.usdc_usdt
                             self.last_update = time.time()
                             
+                    except asyncio.TimeoutError:
+                        # Timeout is normal - just check if we should continue
+                        if not contracts.status:
+                            break
+                        continue
                     except Exception as e:
                         logger.error(f"Error processing USDC/USDT data: {e}")
                         await asyncio.sleep(1)
