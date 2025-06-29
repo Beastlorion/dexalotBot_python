@@ -1,4 +1,12 @@
 settings = {
+  'SAFETY_BOUNDS': {
+    'AVAX_USDC': {
+      'min_price': 17,
+      'max_price': 19,
+      'max_spread': 0.0005,  # .05%
+      'max_deviation': 0.001  # 1%
+    }
+  },
   'responseTime':10,
   'AVAX_USDC':{
     "secret_name": '', 
