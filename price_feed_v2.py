@@ -154,7 +154,7 @@ class EnhancedPriceFeed:
             logger.info(f"Starting Bybit feed for {self.config.symbol}")
             
             # Parse base and quote from symbol
-            parts = self.config.symbol.split('_')
+            parts = self.config.symbol.split('/')
             if len(parts) != 2:
                 logger.error(f"Invalid symbol format: {self.config.symbol}")
                 return
@@ -177,7 +177,13 @@ class EnhancedPriceFeed:
                 recv_timeout=5.0
             )
             
-            # Add message handler
+            # Store subscription data for later use
+            self._bybit_subscription_data = {
+                'bybit_symbol': bybit_symbol,
+                'need_usdc_conversion': need_usdc_conversion
+            }
+            
+            # Add message handler that also handles subscription
             def handle_bybit_message(message: str):
                 try:
                     data = json.loads(message)
@@ -188,11 +194,23 @@ class EnhancedPriceFeed:
             
             ws_connection.add_message_handler(handle_bybit_message)
             
-            # Start connection
+            # Start connection and wait for it to be ready
+            logger.info(f"Starting WebSocket connection for bybit-{self.config.symbol}")
             await self.websocket_manager.start_connection(f"bybit-{self.config.symbol}")
             
-            # Wait a bit for connection to establish
-            await asyncio.sleep(0.5)
+            # Wait for connection to be established
+            connected = await ws_connection.wait_for_connection(timeout=5.0)
+            
+            if not connected:
+                logger.error(f"Bybit WebSocket failed to connect within 5.0s")
+                self._record_source_failure(PriceSource.BYBIT)
+                return
+            
+            logger.info(f"Bybit WebSocket connected successfully")
+            
+            # Now send subscription
+            bybit_symbol = self._bybit_subscription_data['bybit_symbol']
+            need_usdc_conversion = self._bybit_subscription_data['need_usdc_conversion']
             
             # Subscribe to orderbook depth for main symbol
             subscribe_args = [f"orderbook.50.{bybit_symbol}"]
@@ -212,7 +230,14 @@ class EnhancedPriceFeed:
             }
             
             logger.info(f"Bybit subscribing to: {subscribe_args}")
-            await ws_connection.send_message(json.dumps(subscribe_msg))
+            success = await ws_connection.send_message(json.dumps(subscribe_msg))
+            
+            if not success:
+                logger.error("Failed to send Bybit subscription message")
+                self._record_source_failure(PriceSource.BYBIT)
+                return
+            
+            logger.info("Bybit subscription message sent successfully")
             
         except Exception as e:
             logger.error(f"Failed to start Bybit feed: {e}")
@@ -267,8 +292,13 @@ class EnhancedPriceFeed:
         try:
             topic = data.get('topic', '')
             
+            # Handle subscription success
+            if data.get('success') == True and data.get('op') == 'subscribe':
+                logger.info(f"Bybit subscription confirmed for: {data.get('req_id', 'unknown')}")
+                return
+            
             # Handle orderbook updates
-            if topic.startswith('orderbook.'):
+            if topic and topic.startswith('orderbook.'):
                 symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT" or "USDCUSDT"
                 
                 # Get orderbook data

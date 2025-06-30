@@ -50,17 +50,23 @@ class WebSocketConnection:
     async def connect(self) -> bool:
         """Establish WebSocket connection"""
         try:
-            logger.info(f"Connecting to WebSocket: {self.name}")
-            self.websocket = await websockets.connect(self.url)
+            logger.info(f"Connecting to WebSocket: {self.name} at {self.url}")
+            self.websocket = await websockets.connect(
+                self.url,
+                ping_interval=20,
+                ping_timeout=10,
+                close_timeout=10
+            )
             self.shutdown.register_websocket(self.websocket)
             self.is_connected = True
             self.reconnect_count = 0
-            logger.info(f"Connected to WebSocket: {self.name}")
+            logger.info(f"Successfully connected to WebSocket: {self.name}")
             return True
             
         except Exception as e:
             self.connection_errors += 1
             logger.error(f"Failed to connect to WebSocket {self.name}: {e}")
+            self.is_connected = False
             return False
     
     async def disconnect(self):
@@ -79,11 +85,12 @@ class WebSocketConnection:
     async def send_message(self, message: str) -> bool:
         """Send message to WebSocket"""
         if not self.is_connected or not self.websocket:
-            logger.error(f"Cannot send message - WebSocket {self.name} not connected")
+            logger.warning(f"Cannot send message - WebSocket {self.name} not connected")
             return False
             
         try:
             await self.websocket.send(message)
+            logger.debug(f"Sent message to {self.name}: {message[:100]}...")
             return True
         except Exception as e:
             logger.error(f"Failed to send message to WebSocket {self.name}: {e}")
@@ -148,10 +155,13 @@ class WebSocketConnection:
                         break
                     
                     # Wait before retry with shutdown check
-                    logger.info(f"Retrying connection to {self.name} in {self.reconnect_delay}s")
+                    logger.info(f"Retrying connection to {self.name} in {self.reconnect_delay}s (attempt {self.reconnect_count}/{self.max_reconnect_attempts})")
                     if await self.shutdown.wait_with_timeout(self.reconnect_delay):
                         break  # Shutdown requested
                     continue
+                else:
+                    # Connection successful, give it a moment to stabilize
+                    await asyncio.sleep(0.1)
             
             # Handle messages
             await self.handle_messages()
@@ -170,6 +180,17 @@ class WebSocketConnection:
         # Cleanup
         await self.disconnect()
         logger.info(f"WebSocket {self.name} stopped")
+    
+    async def wait_for_connection(self, timeout: float = 5.0) -> bool:
+        """Wait for connection to be established"""
+        start_time = asyncio.get_event_loop().time()
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            if self.is_connected:
+                return True
+            await asyncio.sleep(0.1)
+        
+        return False
     
     def get_stats(self) -> Dict[str, Any]:
         """Get connection statistics"""
@@ -236,7 +257,10 @@ class WebSocketManager:
         self.running_tasks[name] = task
         self.shutdown.register_task(task, f"websocket-{name}")
         
-        logger.info(f"Started WebSocket connection: {name}")
+        logger.info(f"Started WebSocket connection task: {name}")
+        
+        # Wait a bit for initial connection attempt
+        await asyncio.sleep(0.2)
     
     async def stop_connection(self, name: str):
         """Stop a WebSocket connection"""
