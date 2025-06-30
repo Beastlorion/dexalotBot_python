@@ -346,10 +346,10 @@ async def handleWebscokets(pairObj, testnet):
               bidPrices = data['buyBook'][0]['prices'].split(',')
               if bidPrices[0] == '':
                 bidPrices = []
+              askPrices = data['sellBook'][0]['prices'].split(',')
               if askPrices[0] == '':
                 askPrices = []
               bidQtys = data['buyBook'][0]['quantities'].split(',')
-              askPrices = data['sellBook'][0]['prices'].split(',')
               askQtys = data['sellBook'][0]['quantities'].split(',')
               buildBids = []
               buildAsks = []
