@@ -1,4 +1,5 @@
 import sys, os, asyncio, time, ast, json, shortuuid, math
+import logging
 from decimal import Decimal
 from eth_utils.units import units, decimal
 import contracts, tools, price_feeds
@@ -7,6 +8,8 @@ from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values
 import urllib.request
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 config = {
     **dotenv_values(".env.shared"),
@@ -29,6 +32,7 @@ openOrders = None
 
 async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
+  logger.info(f"[ORDERS] Getting open orders for {pair}, refreshActiveOrders={refreshActiveOrders}")
   try:
     signedApiUrl = config.get("fuji_signedApiUrl") if testnet else config.get("signedApiUrl")
     url = signedApiUrl + "orders?pair=" + pair + "&category=0"
@@ -36,6 +40,7 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
     req.add_header('x-signature', contracts.signature)
     openOrdersJson = urlopen(req).read()
     openOrders = json.loads(openOrdersJson)
+    logger.info(f"[ORDERS] Retrieved {len(openOrders.get('rows', []))} open orders")
     if len(contracts.activeOrders)>0 and refreshActiveOrders:
       trackedOrderIDs = []
       orderIDsToCancel = []
@@ -65,19 +70,25 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
           print("ORDER NOT FOUND:", record)
           contracts.activeOrders.remove(record)
   except Exception as error:
+    logger.error(f"[ORDERS] Error in getOpenOrders: {error}", exc_info=True)
     print("error in getOpenOrders:", error)
+  logger.debug(f"[ORDERS] Finished getting open orders at {time.time()}")
   print("finished getting open orders:",time.time())
   return openOrders
 
 def getBestOrders():
+  logger.info("[ORDERS] Getting best orders from order book")
   orderBooks = contracts.contracts["OrderBooks"]
   try:
     currentBestBid = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id0"]).call();
     currentBestAsk = orderBooks["deployedContract"].functions.getTopOfTheBook(orderBooks["id1"]).call();
     contracts.bestBid = currentBestBid[0]/1000000
     contracts.bestAsk = currentBestAsk[0]/1000000
+    logger.info(f"[ORDERS] Best bid: {contracts.bestBid}, Best ask: {contracts.bestAsk}")
   except Exception as error:
+    logger.error(f"[ORDERS] Error in getBestOrders: {error}", exc_info=True)
     print("error in getBestOrders:", error)
+  logger.debug(f"[ORDERS] Finished getting best orders at {time.time()}")
   print("finished getting best orders:",time.time())
   return
 
@@ -86,8 +97,10 @@ def getBestOrders():
 
 async def cancelOrderList(orderIDs, priorityGwei):
   global cancelOrderCount
+  logger.info(f"[ORDERS] Canceling {len(orderIDs)} orders with priority gas {priorityGwei}")
   print("cancel orders:",orderIDs)
   if len(orderIDs) == 0:
+    logger.debug("[ORDERS] No orders to cancel")
     return False
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
@@ -95,18 +108,23 @@ async def cancelOrderList(orderIDs, priorityGwei):
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1 + priorityGwei, 'gwei')});
     contracts.incrementNonce()
     response = contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
+    logger.info(f"[ORDERS] Cancel order transaction sent: {response.hex()}")
     print("CANCEL ORDER LIST RESPONSE: ", response)
     cancelOrderCount = cancelOrderCount + len(orderIDs)
+    logger.info(f"[ORDERS] Successfully cancelled {len(orderIDs)} orders. Total cancelled: {cancelOrderCount}")
   except Exception as error:
+    logger.error(f"[ORDERS] Error in cancelOrderList: {error}", exc_info=True)
     print("error in cancelOrderList", error)
   # print("cancelOrderList response:", response.hex(), round(time.time()))
   
 async def cancelOrderLevels(pairStr, levelsToUpdate):
+  logger.info(f"[ORDERS] Canceling order levels <= {levelsToUpdate} for {pairStr}")
   for i in range(5):
     openOrders = await getOpenOrders(pairStr)
     if (len(openOrders["rows"])==len(contracts.activeOrders) or len(contracts.activeOrders) == 0):
       break
     else:
+      logger.debug(f"[ORDERS] Order count mismatch, waiting... (attempt {i+1}/5)")
       await asyncio.sleep(1)
   
   if len(openOrders["rows"]) >= 0:
@@ -127,27 +145,33 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
         print("CANCELLING MISSING ClientOrderID:", a.replace('\x00',''))
         orderIDs.append(order["id"])
     try:
-      await cancelOrderList(orderIDs)
+      await cancelOrderList(orderIDs, 1)
       for order in ordersToCancel:
         contracts.activeOrders.remove(order)
+      logger.info(f"[ORDERS] Successfully cancelled {len(orderIDs)} orders at levels <= {levelsToUpdate}")
       return True
     except Exception as error:
+      logger.error(f"[ORDERS] Error during cancelOrderLevels - cancelOrderList: {error}", exc_info=True)
       print("error during cancelOrderLevels - cancelOrderList")
       return False
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
+  logger.info(f"[ORDERS] Canceling all orders for {pairStr}, shuttingDown={shuttingDown}")
   await asyncio.sleep(4)
   openOrders = await getOpenOrders(pairStr)
   i = 0
   orderIDs = []
   for order in openOrders["rows"]:
     orderIDs.append(order["id"])
+  logger.info(f"[ORDERS] Found {len(orderIDs)} orders to cancel")
   await cancelOrderList(orderIDs,1)
   await asyncio.sleep(3)
   openOrders = await getOpenOrders(pairStr)
+  logger.info(f"[ORDERS] After cancellation, {len(openOrders.get('rows', []))} orders remain")
   
 def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks):
+  logger.debug(f"[ORDERS] Generating buy orders - marketPrice: {marketPrice}, levelsToUpdate: {levelsToUpdate}")
   try:
     orders = []
     availableFunds = availQuoteFunds
@@ -172,10 +196,13 @@ def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, l
         if retrigger:
           contracts.retrigger = True
   except Exception as error:
+    logger.error(f"[ORDERS] Error during generateBuyOrders: {error}", exc_info=True)
     print("ERROR DURING GENERATE BUY ORDERS:",error)
+  logger.debug(f"[ORDERS] Generated {len(orders)} buy orders")
   return orders
 
 def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, levels, levelsToUpdate, availBaseFunds, myBids):
+  logger.debug(f"[ORDERS] Generating sell orders - marketPrice: {marketPrice}, levelsToUpdate: {levelsToUpdate}")
   try:
     orders = []
     availableFunds = availBaseFunds
@@ -200,14 +227,18 @@ def generateSellOrders(marketPrice,settings,totalBaseFunds,totalFunds,pairObj, l
         if retrigger:
           contracts.retrigger = True
   except Exception as error:
+    logger.error(f"[ORDERS] Error during generateSellOrders: {error}", exc_info=True)
     print("ERROR DURING GENERATE SELL ORDERS:",error)
+  logger.debug(f"[ORDERS] Generated {len(orders)} sell orders")
   return orders
 
 async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myAsks,availQuoteFunds):
+  logger.info(f"[ORDERS] Executing taker buy - marketPrice: {marketPrice}, bestAsk: {contracts.bestAsk}")
   try:
     bestAsk = contracts.bestAsk
     myBestAsk = myAsks[0]['price'] if len(myAsks) > 0 else marketPrice * 1.1
     if bestAsk == myBestAsk:
+      logger.debug(f"[ORDERS] Skipping taker buy - bestAsk equals myBestAsk")
       return False
     spread = tools.getSpread(marketPrice,settings,totalQuoteFunds,totalFunds,{'level':0},0)
     price = math.floor(marketPrice * (1 - spread - settings['takerThreshold']/100) * pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
@@ -221,6 +252,7 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
       if price >= myBestAsk:
         price = math.floor(myBestAsk * pow(10,pairObj["quotedisplaydecimals"]) - 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 3000000
+      logger.info(f"[ORDERS] Execute Taker Buy - Price: {price}, Qty: {qty}")
       print('Execute Taker Buy - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addNewOrder({
         'clientOrderId': str(shortuuid.uuid()).encode('utf-8'),
@@ -235,16 +267,21 @@ async def executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairOb
       }).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
       contracts.incrementNonce()
       await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+      logger.info(f"[ORDERS] Taker buy order sent successfully")
     else:
+      logger.debug(f"[ORDERS] Taker buy skipped - price {price} <= bestAsk {bestAsk}")
       return False
   except Exception as error:
+    logger.error(f"[ORDERS] Error in executeTakerBuy: {error}", exc_info=True)
     print("Error in executeTakerBuy:",error)
     
 async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBids,availBaseFunds):
+  logger.info(f"[ORDERS] Executing taker sell - marketPrice: {marketPrice}, bestBid: {contracts.bestBid}")
   try:
     bestBid = contracts.bestBid
     myBestBid = myBids[0]['price'] if len(myBids) > 0 else marketPrice * 0.9
     if bestBid == myBestBid:
+      logger.debug(f"[ORDERS] Skipping taker sell - bestBid equals myBestBid")
       return False
     spread = tools.getSpread(marketPrice,settings,totalBaseFunds,totalFunds,{'level':0},1)
     price = math.ceil(marketPrice * (1 + spread + settings['takerThreshold']/100)* pow(10,pairObj["quotedisplaydecimals"]))/pow(10,pairObj["quotedisplaydecimals"])
@@ -258,6 +295,7 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
       if price <= myBestBid:
         price = math.ceil(myBestBid * pow(10,pairObj["quotedisplaydecimals"]) + 1)/pow(10,pairObj["quotedisplaydecimals"])
       gas = 2000000
+      logger.info(f"[ORDERS] Execute Taker Sell - Price: {price}, Qty: {qty}")
       print('Execute Taker Sell - Price:',price,'Qty:',qty)
       contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addNewOrder({
         'clientOrderId': str(shortuuid.uuid()).encode('utf-8'),
@@ -272,15 +310,19 @@ async def executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairOb
       }).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas})
       contracts.incrementNonce()
       await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+      logger.info(f"[ORDERS] Taker sell order sent successfully")
     else:
+      logger.debug(f"[ORDERS] Taker sell skipped - price {price} >= bestBid {bestBid}")
       return False
   except Exception as error:
+    logger.error(f"[ORDERS] Error in executeTakerSell: {error}", exc_info=True)
     print("Error in executeTakerSell:",error)
   
     
 
 async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pairObj, pairStr, pairByte32, levels, levelsToUpdate, takerBuy, takerSell, priorityGwei):
   global cancelReplaceCount, addOrderCount
+  logger.info(f"[ORDERS] Starting cancelReplaceOrders - marketPrice: {marketPrice}, levelsToUpdate: {levelsToUpdate}, takerBuy: {takerBuy}, takerSell: {takerSell}")
   replaceOrders = []
   newOrders = []
   ordersToUpdate = []
@@ -323,9 +365,12 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     availQuoteFunds = totalQuoteFunds * .99
 
   if settings['takerEnabled'] and not settings['autoTake']:
+    logger.debug(f"[ORDERS] Taker enabled - checking opportunities")
     if takerSell:
+      logger.info(f"[ORDERS] Executing taker sell")
       await executeTakerSell(marketPrice,settings,totalBaseFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myBids,availTakerBaseFunds)
     elif takerBuy:
+      logger.info(f"[ORDERS] Executing taker buy")
       await executeTakerBuy(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj,pairByte32,shiftPrice,shiftQty, myAsks,availTakerQuoteFunds)
       
   for order in contracts.activeOrders:
@@ -382,6 +427,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(replaceOrders) > 0:
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
+    logger.info(f"[ORDERS] Replacing {len(sortedOrders)} orders")
     asyncio.create_task(replaceOrderList(sortedOrders, pairObj, pairByte32, shiftPrice,shiftQty,priorityGwei,settings))
     cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
@@ -389,22 +435,30 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(newOrders) > 0:
     await asyncio.sleep(0.1)
     addTx = True
+    logger.info(f"[ORDERS] Adding {len(newOrders)} new orders")
     asyncio.create_task(addOrderList(newOrders,pairObj,pairByte32,shiftPrice,shiftQty,settings))
     addOrderCount = addOrderCount + len(newOrders)
   
   if replaceTx or addTx:
+    logger.debug(f"[ORDERS] Waiting for order operations to complete - replaceTx: {replaceTx}, addTx: {addTx}")
     for x in range(responseTime*10):
       if (contracts.replaceStatus == 1 or not replaceTx) and (contracts.addStatus == 1 or not addTx):
+        logger.info(f"[ORDERS] Order operations completed successfully - replaced: {len(replaceOrders)}, added: {len(newOrders)}")
         return True
       elif (contracts.replaceStatus == 2 and replaceTx) or (contracts.addStatus == 2 and addTx):
+        logger.warning(f"[ORDERS] Order operations failed - replaceStatus: {contracts.replaceStatus}, addStatus: {contracts.addStatus}")
         return False
       await asyncio.sleep(0.1)
+    logger.warning(f"[ORDERS] Order operations timed out after {responseTime}s")
     return False
   else:
+    logger.debug(f"[ORDERS] No order operations needed")
     await asyncio.sleep(1)
+  logger.info(f"[ORDERS] cancelReplaceOrders completed - total active orders: {len(contracts.activeOrders)}")
   return True
 
 async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, priorityGwei,settings):
+  logger.info(f"[ORDERS] Starting replaceOrderList with {len(orders)} orders")
   
   updateIDs = []
   clientOrderIDs = []
@@ -428,6 +482,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
       'stp': 1
     })
   
+  logger.info(f"[ORDERS] Replacing orders with IDs: {updateIDs}")
   print('replaceOrderList -', len(orders), updateIDs)
   try:
     contracts.newPendingTx('replaceOrderList',orders)
@@ -438,9 +493,11 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(priorityGwei + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(priorityGwei, 'gwei')})
     contracts.incrementNonce()
     a = await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    logger.info(f"[ORDERS] Replace order transaction sent at {time.time()}")
     print('replaceOrderList RESPONSE:',time.time())
     return
   except Exception as error:
+    logger.error(f"[ORDERS] Error in replaceOrderList: {error}", exc_info=True)
     print('error in replaceOrderList:', error)
     for tx in contracts.pendingTransactions:
       if tx['purpose'] == 'replaceOrderList':
@@ -448,6 +505,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
   return
 
 async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,settings):
+  logger.info(f"[ORDERS] Starting addOrderList with {len(limit_orders)} orders")
   prices = []
   quantities = []
   sides = []
@@ -468,6 +526,7 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,set
       'stp': 1
     })
 
+  logger.info(f"[ORDERS] Adding {len(limit_orders)} orders - {len([o for o in limit_orders if o['side'] == 0])} buys, {len([o for o in limit_orders if o['side'] == 1])} sells")
   print('Add order list - ', len(limit_orders))
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
@@ -477,7 +536,9 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,set
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1, 'gwei')})
     contracts.incrementNonce()
     await asyncio.to_thread(contracts.contracts["SubNetProvider"]["provider"].eth.send_transaction,contract_data)
+    logger.info(f"[ORDERS] Add order transaction sent")
   except Exception as error:
+    logger.error(f"[ORDERS] Error in addOrderList: {error}", exc_info=True)
     print('error in addOrderList:', error)
     for tx in contracts.pendingTransactions:
       if tx['purpose'] == 'addOrderList':
