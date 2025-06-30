@@ -429,8 +429,6 @@ class MarketMaker:
             
             # Check if price feed is still running and has data
             if price_feed_task.done():
-                logger.error("Price feed task completed unexpectedly early")
-                # Check if it failed
                 try:
                     await price_feed_task  # This will raise if it failed
                 except Exception as e:
