@@ -481,7 +481,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(replaceOrders) > 0:
     replaceTx = True
     sortedOrders = sorted(replaceOrders, key = lambda d: d['costDif'])
-    logger.info(f"[ORDERS] Replacing {len(sortedOrders)} orders")
+    # logger.info(f"[ORDERS] Replacing {len(sortedOrders)} orders")
     asyncio.create_task(replaceOrderList(sortedOrders, pairObj, pairByte32, shiftPrice,shiftQty,priorityGwei,settings))
     cancelReplaceCount = cancelReplaceCount + len(sortedOrders)
   
@@ -536,7 +536,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
       'stp': 1
     })
   
-  logger.info(f"[ORDERS] Replacing orders with IDs: {updateIDs}")
+  # logger.info(f"[ORDERS] Replacing orders with IDs: {updateIDs}")
   print('replaceOrderList -', len(orders), updateIDs)
   try:
     contracts.newPendingTx('replaceOrderList',orders)

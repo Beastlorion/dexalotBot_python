@@ -257,9 +257,9 @@ class MarketMaker:
             
             # If price is significantly different from order book (>2x), use order book
             if price_ratio > 2.0 or price_ratio < 0.5:
-                logger.warning(f"Price feed ({market_price:.4f}) differs significantly from order book ({order_book_mid:.4f})")
-                logger.warning(f"Using order book price instead")
-                market_price = order_book_mid
+                logger.error(f"Price feed ({market_price:.4f}) differs significantly from order book ({order_book_mid:.4f})")
+                # logger.warning(f"Using order book price instead")
+                # market_price = order_book_mid
         
         # Apply price adjustment if configured
         if 'priceAdjust' in self.market_settings and self.market_settings['priceAdjust'] != 0:
@@ -467,11 +467,13 @@ class MarketMaker:
                     # Check if price feed stopped
                     if price_feed_task.done():
                         try:
-                            await price_feed_task  # This will raise if it failed
+                            await price_feed_task  # This will raise if it has completed normally
                             logger.warning("Price feed task completed normally")
                         except Exception as e:
                             logger.error(f"Price feed task failed: {e}")
-                        # Don't stop - let order updater continue with last known price
+                            # Price feed is critical - we should stop if it fails to start
+                            logger.error("Price feed stopped, shutting down order updater")
+                            self.request_shutdown()
                         return
                     
                     # Check if data feed stopped (this is more critical)
