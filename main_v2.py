@@ -262,10 +262,14 @@ class EnhancedBotManager:
             
             # Cancel orders BEFORE shutting down tasks and connections
             if self.market_pair and hasattr(orders, 'cancelAllOrders'):
-                logger.info(f"[SHUTDOWN] Starting order cancellation for {self.market_pair}")
+                # Convert market pair format from AVAX_USDC to AVAX/USDC for API compatibility
+                base = tools.getSymbolFromName(self.market_pair, 0)
+                quote = tools.getSymbolFromName(self.market_pair, 1)
+                pair_str = f"{base}/{quote}"
+                logger.info(f"[SHUTDOWN] Starting order cancellation for {pair_str}")
                 try:
                     # Give more time for order cancellation during shutdown
-                    result = await asyncio.wait_for(orders.cancelAllOrders(self.market_pair, True), timeout=20.0)
+                    result = await asyncio.wait_for(orders.cancelAllOrders(pair_str, True), timeout=20.0)
                     if result:
                         logger.info("[SHUTDOWN] All orders cancelled successfully")
                     else:

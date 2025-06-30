@@ -18,7 +18,7 @@ import settings
 import tools
 import contracts
 import orders
-import price_feeds
+import price_feeds_v2
 from config import config
 
 logger = logging.getLogger(__name__)
