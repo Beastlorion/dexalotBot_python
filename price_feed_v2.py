@@ -446,3 +446,110 @@ async def example_usage():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(example_usage())
+
+
+# ============================================================================
+# Backward Compatibility Layer
+# ============================================================================
+
+# Global instance for backward compatibility
+_global_price_feed: Optional[EnhancedPriceFeed] = None
+_global_shutdown: Optional[ShutdownManager] = None
+
+# Module-level variables for backward compatibility with old price_feeds.py
+marketPrice = 0.0
+ethUsdtPrice = 0.0
+volSpread = 0.0
+lastUpdate = 0
+lastUpdateEth = 0
+
+
+async def startPriceFeed(market: str, settings: Dict[str, Any]):
+    """Backward compatibility function for starting price feed"""
+    global _global_price_feed, _global_shutdown, marketPrice, lastUpdate
+    
+    logger.info(f"[PRICE_FEED_V2] Starting enhanced price feed for {market}")
+    
+    # Extract base and quote from market string
+    import tools
+    base = tools.getSymbolFromName(market, 0)
+    quote = tools.getSymbolFromName(market, 1)
+    
+    # Determine price sources based on settings
+    sources = []
+    primary_source = PriceSource.BINANCE  # Default
+    
+    if settings.get('useBybitPrice', False):
+        sources.append(PriceSource.BYBIT)
+        primary_source = PriceSource.BYBIT
+    elif settings.get('useCustomPrice', False):
+        sources.append(PriceSource.CUSTOM)
+        primary_source = PriceSource.CUSTOM
+    else:
+        sources.append(PriceSource.BINANCE)
+    
+    # Create configuration
+    config = PriceFeedConfig(
+        symbol=f"{base}/{quote}",
+        sources=sources,
+        primary_source=primary_source,
+        max_price_age=settings.get('timeout', 30),
+        enable_validation=True,
+        custom_price_url=settings.get('customPriceUrl', 'http://localhost:3000/prices')
+    )
+    
+    # Create components
+    from safety import PriceBounds, PriceSafetyValidator, CircuitBreaker
+    
+    bounds = None
+    if 'SAFETY_BOUNDS' in settings and market in settings['SAFETY_BOUNDS']:
+        safety_config = settings['SAFETY_BOUNDS'][market]
+        bounds = PriceBounds(
+            min_price=safety_config.get('min_price', 0.01),
+            max_price=safety_config.get('max_price', 100000),
+            max_spread_percent=safety_config.get('max_spread', 0.01)
+        )
+    
+    # Create validator and circuit breaker
+    validator = PriceSafetyValidator(bounds) if bounds else None
+    circuit_breaker = CircuitBreaker()
+    
+    # Create shutdown manager
+    _global_shutdown = ShutdownManager()
+    
+    # Create and start price feed
+    _global_price_feed = EnhancedPriceFeed(config, _global_shutdown, validator, circuit_breaker)
+    await _global_price_feed.start()
+    
+    # Start background task to update global variables
+    asyncio.create_task(_update_globals_loop())
+    
+    logger.info(f"[PRICE_FEED_V2] Enhanced price feed started for {market}")
+
+
+async def _update_globals_loop():
+    """Update global variables for backward compatibility"""
+    global marketPrice, lastUpdate, volSpread, ethUsdtPrice, lastUpdateEth
+    
+    while _global_price_feed and contracts.status:
+        try:
+            price, is_fresh = _global_price_feed.get_current_price()
+            if is_fresh and price > 0:
+                marketPrice = price
+                lastUpdate = time.time()
+                
+                # For WBTC pairs, update ETH price tracking
+                if 'ETH' in _global_price_feed.config.symbol:
+                    ethUsdtPrice = price
+                    lastUpdateEth = time.time()
+            
+            # Get volatility spread if available
+            status = _global_price_feed.get_status()
+            volSpread = status.get('volatility_spread', 0.0)
+            
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Error updating globals: {e}")
+            await asyncio.sleep(1)
+    
+    logger.info("[PRICE_FEED_V2] Global update loop exited")
