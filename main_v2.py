@@ -108,27 +108,15 @@ class EnhancedBotManager:
         try:
             logger.info("Performing enhanced graceful shutdown...")
             
-            # Stop all market making activities
-            contracts.status = False
-            
-            # Cancel all orders if we have a market pair
-            if self.market_pair:
-                logger.info(f"Cancelling all orders for {self.market_pair}")
-                
-                # Use interruptible sleep for order cancellation delays
-                async def cancel_with_timeout():
-                    await orders.cancelAllOrders(self.market_pair, True)
-                
-                try:
-                    await asyncio.wait_for(cancel_with_timeout(), timeout=10.0)
-                    logger.info("All orders cancelled successfully")
-                except asyncio.TimeoutError:
-                    logger.warning("Order cancellation timed out")
-                
             # Stop market maker instance if exists
             if (hasattr(marketMaker, 'market_maker_instance') and 
                 marketMaker.market_maker_instance):
                 marketMaker.market_maker_instance.request_shutdown()
+                logger.info("Market maker shutdown requested")
+            
+            # Note: Order cancellation is now handled in the finally block of run()
+            # before shutdown.shutdown() is called, ensuring connections are still alive
+            # contracts.status is set to False later to keep connections alive
                 
         except Exception as e:
             logger.error(f"Error during graceful shutdown: {e}")
@@ -271,6 +259,22 @@ class EnhancedBotManager:
             # Ensure cleanup runs
             if not self.shutdown.is_shutdown_requested():
                 self.shutdown.request_shutdown(ShutdownReason.MANUAL)
+            
+            # Cancel orders BEFORE shutting down tasks and connections
+            if self.market_pair and hasattr(orders, 'cancelAllOrders'):
+                logger.info(f"Cancelling all orders before shutdown for {self.market_pair}")
+                try:
+                    await asyncio.wait_for(orders.cancelAllOrders(self.market_pair, True), timeout=10.0)
+                    logger.info("All orders cancelled successfully")
+                except asyncio.TimeoutError:
+                    logger.warning("Order cancellation timed out")
+                except Exception as e:
+                    logger.error(f"Error cancelling orders: {e}")
+            
+            # Now stop all market making activities
+            if hasattr(contracts, 'status'):
+                contracts.status = False
+                logger.info("Market making activities stopped")
             
             await self.shutdown.shutdown()
             
