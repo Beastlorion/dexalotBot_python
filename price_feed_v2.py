@@ -219,10 +219,26 @@ class EnhancedPriceFeed:
             bybit_symbol = self._bybit_subscription_data['bybit_symbol']
             need_usdc_conversion = self._bybit_subscription_data['need_usdc_conversion']
             
-            # Subscribe to orderbook depth for main symbol
-            subscribe_args = [f"orderbook.50.{bybit_symbol}"]
+            # Check if we should use orderbook or trade data
+            # Default to using trades unless explicitly configured to use orderbook
+            use_orderbook = False
             
-            # If we need USDC conversion, also subscribe to USDCUSDT orderbook
+            # Check if useBybitOrderbook is configured in settings
+            import settings
+            market_settings = settings.settings.get(self.config.symbol.replace('/', '_'), {})
+            if 'useBybitOrderbook' in market_settings:
+                use_orderbook = market_settings.get('useBybitOrderbook', False)
+            
+            if use_orderbook:
+                # Subscribe to orderbook depth for main symbol
+                subscribe_args = [f"orderbook.50.{bybit_symbol}"]
+                logger.info(f"Using orderbook data for Bybit {bybit_symbol}")
+            else:
+                # Subscribe to public trades for main symbol (default)
+                subscribe_args = [f"publicTrade.{bybit_symbol}"]
+                logger.info(f"Using trade data for Bybit {bybit_symbol}")
+            
+            # If we need USDC conversion, always use orderbook for USDCUSDT
             if need_usdc_conversion:
                 subscribe_args.append("orderbook.50.USDCUSDT")
                 # Store that we need conversion
@@ -295,7 +311,7 @@ class EnhancedPriceFeed:
             self._record_source_failure(PriceSource.BINANCE)
     
     async def _process_bybit_data(self, data: Dict[str, Any]):
-        """Process Bybit orderbook data"""
+        """Process Bybit trade or orderbook data"""
         try:
             topic = data.get('topic', '')
             
@@ -304,8 +320,39 @@ class EnhancedPriceFeed:
                 logger.info(f"Bybit subscription confirmed for: {data.get('req_id', 'unknown')}")
                 return
             
-            # Handle orderbook updates
-            if topic and topic.startswith('orderbook.'):
+            # Handle public trade updates
+            if topic and topic.startswith('publicTrade.'):
+                symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT"
+                
+                # Get trade data
+                trade_data = data.get('data', [])
+                if not trade_data:
+                    return
+                
+                # Use the most recent trade price
+                # Trade data format: [{"i": "id", "T": timestamp, "p": price, "v": volume, "S": side, ...}]
+                latest_trade = trade_data[-1]  # Get the last trade in the array
+                trade_price = float(latest_trade.get('p', 0))
+                
+                if trade_price <= 0:
+                    return
+                
+                # Handle USDC conversion if needed
+                if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
+                    # Convert from USDT to USDC
+                    if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
+                        converted_price = trade_price / self._usdc_usdt_price
+                        logger.debug(f"Bybit {symbol} trade price: {trade_price} USDT = {converted_price} USDC")
+                        await self._update_price(PriceSource.BYBIT, converted_price)
+                    else:
+                        logger.warning("Waiting for USDC/USDT price for conversion")
+                else:
+                    # No conversion needed
+                    logger.debug(f"Bybit {symbol} trade price: {trade_price}")
+                    await self._update_price(PriceSource.BYBIT, trade_price)
+            
+            # Handle orderbook updates (for USDCUSDT conversion or if orderbook mode is enabled)
+            elif topic and topic.startswith('orderbook.'):
                 symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT" or "USDCUSDT"
                 
                 # Get orderbook data
@@ -331,18 +378,18 @@ class EnhancedPriceFeed:
                     self._usdc_usdt_price = mid_price
                     logger.debug(f"Bybit USDC/USDT price: {mid_price}")
                 else:
-                    # This is our main symbol price
+                    # This is our main symbol price (only if using orderbook mode)
                     if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
                         # Convert from USDT to USDC
                         if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
                             converted_price = mid_price / self._usdc_usdt_price
-                            logger.debug(f"Bybit {symbol} price: {mid_price} USDT = {converted_price} USDC")
+                            logger.debug(f"Bybit {symbol} orderbook price: {mid_price} USDT = {converted_price} USDC")
                             await self._update_price(PriceSource.BYBIT, converted_price)
                         else:
                             logger.warning("Waiting for USDC/USDT price for conversion")
                     else:
                         # No conversion needed
-                        logger.debug(f"Bybit {symbol} price: {mid_price}")
+                        logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
                         await self._update_price(PriceSource.BYBIT, mid_price)
                         
         except Exception as e:
