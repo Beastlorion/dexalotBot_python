@@ -421,7 +421,7 @@ async def handleWebscokets(pairObj, testnet):
                             if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
                               activeOrders.remove(oldOrder)
                       elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['FILLED']:
-                        print("FILLED NEWORDER:",parsed)
+                        print("FILLED NEW ORDER:",parsed)
                         order['tracked'] = True
                         if tx['purpose'] in ['replaceOrderList']:
                           for oldOrder in activeOrders:
