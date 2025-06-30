@@ -153,14 +153,28 @@ class EnhancedPriceFeed:
         try:
             logger.info(f"Starting Bybit feed for {self.config.symbol}")
             
-            # Create Bybit symbol (e.g., AVAX_USDC -> AVAXUSDC)
-            bybit_symbol = self.config.symbol.replace('_', '').upper()
+            # Parse base and quote from symbol
+            parts = self.config.symbol.split('_')
+            if len(parts) != 2:
+                logger.error(f"Invalid symbol format: {self.config.symbol}")
+                return
+            
+            base, quote = parts
+            
+            # For Bybit, we need to convert USDC quotes to USDT
+            if quote == 'USDC':
+                # We'll get base/USDT price and USDC/USDT price
+                bybit_symbol = f"{base}USDT"
+                need_usdc_conversion = True
+            else:
+                bybit_symbol = f"{base}{quote}"
+                need_usdc_conversion = False
             
             # Set up WebSocket connection
             ws_connection = self.websocket_manager.add_connection(
                 name=f"bybit-{self.config.symbol}",
-                url=f"wss://stream.bybit.com/v5/public/spot",
-                recv_timeout=2.0
+                url="wss://stream.bybit.com/v5/public/spot",
+                recv_timeout=5.0
             )
             
             # Add message handler
@@ -177,11 +191,27 @@ class EnhancedPriceFeed:
             # Start connection
             await self.websocket_manager.start_connection(f"bybit-{self.config.symbol}")
             
-            # Subscribe to ticker
+            # Wait a bit for connection to establish
+            await asyncio.sleep(0.5)
+            
+            # Subscribe to orderbook depth for main symbol
+            subscribe_args = [f"orderbook.50.{bybit_symbol}"]
+            
+            # If we need USDC conversion, also subscribe to USDCUSDT orderbook
+            if need_usdc_conversion:
+                subscribe_args.append("orderbook.50.USDCUSDT")
+                # Store that we need conversion
+                self._bybit_needs_usdc_conversion = True
+                self._usdc_usdt_price = None
+            else:
+                self._bybit_needs_usdc_conversion = False
+            
             subscribe_msg = {
                 "op": "subscribe",
-                "args": [f"tickers.{bybit_symbol}"]
+                "args": subscribe_args
             }
+            
+            logger.info(f"Bybit subscribing to: {subscribe_args}")
             await ws_connection.send_message(json.dumps(subscribe_msg))
             
         except Exception as e:
@@ -233,13 +263,51 @@ class EnhancedPriceFeed:
             self._record_source_failure(PriceSource.BINANCE)
     
     async def _process_bybit_data(self, data: Dict[str, Any]):
-        """Process Bybit ticker data"""
+        """Process Bybit orderbook data"""
         try:
-            if data.get('topic', '').startswith('tickers.'):
-                ticker_data = data.get('data', {})
-                price = float(ticker_data.get('lastPrice', 0))
-                if price > 0:
-                    await self._update_price(PriceSource.BYBIT, price)
+            topic = data.get('topic', '')
+            
+            # Handle orderbook updates
+            if topic.startswith('orderbook.'):
+                symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT" or "USDCUSDT"
+                
+                # Get orderbook data
+                orderbook_data = data.get('data', {})
+                bids = orderbook_data.get('b', [])  # [[price, size], ...]
+                asks = orderbook_data.get('a', [])  # [[price, size], ...]
+                
+                if not bids or not asks:
+                    return
+                
+                # Get best bid and ask
+                best_bid = float(bids[0][0]) if bids else 0
+                best_ask = float(asks[0][0]) if asks else 0
+                
+                if best_bid <= 0 or best_ask <= 0:
+                    return
+                
+                # Calculate mid price
+                mid_price = (best_bid + best_ask) / 2
+                
+                # Handle USDC/USDT conversion
+                if symbol == 'USDCUSDT':
+                    self._usdc_usdt_price = mid_price
+                    logger.debug(f"Bybit USDC/USDT price: {mid_price}")
+                else:
+                    # This is our main symbol price
+                    if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
+                        # Convert from USDT to USDC
+                        if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
+                            converted_price = mid_price / self._usdc_usdt_price
+                            logger.debug(f"Bybit {symbol} price: {mid_price} USDT = {converted_price} USDC")
+                            await self._update_price(PriceSource.BYBIT, converted_price)
+                        else:
+                            logger.warning("Waiting for USDC/USDT price for conversion")
+                    else:
+                        # No conversion needed
+                        logger.debug(f"Bybit {symbol} price: {mid_price}")
+                        await self._update_price(PriceSource.BYBIT, mid_price)
+                        
         except Exception as e:
             logger.error(f"Error processing Bybit data: {e}")
             self._record_source_failure(PriceSource.BYBIT)
