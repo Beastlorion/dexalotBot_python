@@ -392,7 +392,7 @@ async def handleWebscokets(pairObj, testnet):
                     refreshOrderLevel = True
                     print('Order',data['status'],'and removed from activeOrders:',parsed)
                     activeOrders.remove(order)
-              if data['status'] in ['NEW','PARTIAL','REJECTED','CANCEL_REJECT']:
+              if data['status'] in ['NEW','PARTIAL','FILLED','REJECTED','CANCEL_REJECT']:
                 for tx in pendingTransactions:
                   if tx['purpose'] in ['addOrderList','replaceOrderList'] :
                     for order in tx['orders']:
@@ -415,6 +415,13 @@ async def handleWebscokets(pairObj, testnet):
                         print("REJECTED ORDER:",parsed)#clientOrderID, 'reason:', data['code'])
                         if data['code'] == "T-T2PO-01":
                           retrigger = True
+                        order['tracked'] = True
+                        if tx['purpose'] in ['replaceOrderList']:
+                          for oldOrder in activeOrders:
+                            if order["oldClientOrderID"] == oldOrder["clientOrderID"]:
+                              activeOrders.remove(oldOrder)
+                      elif clientOrderID == order["clientOrderID"].decode('utf-8') and data['status'] in ['FILLED']:
+                        print("FILLED NEWORDER:",parsed)
                         order['tracked'] = True
                         if tx['purpose'] in ['replaceOrderList']:
                           for oldOrder in activeOrders:
