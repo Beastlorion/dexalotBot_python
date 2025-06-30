@@ -153,8 +153,15 @@ class EnhancedPriceFeed:
         try:
             logger.info(f"Starting Bybit feed for {self.config.symbol}")
             
-            # Parse base and quote from symbol
-            parts = self.config.symbol.split('/')
+            # Parse base and quote from symbol (handle both _ and / separators)
+            if '_' in self.config.symbol:
+                parts = self.config.symbol.split('_')
+            elif '/' in self.config.symbol:
+                parts = self.config.symbol.split('/')
+            else:
+                logger.error(f"Invalid symbol format: {self.config.symbol}")
+                return
+            
             if len(parts) != 2:
                 logger.error(f"Invalid symbol format: {self.config.symbol}")
                 return
@@ -357,8 +364,8 @@ class EnhancedPriceFeed:
     async def _update_price(self, source: PriceSource, price: float):
         """Update price from a specific source with validation"""
         try:
-            # Validate price if enabled
-            if self.config.enable_validation:
+            # Validate price if enabled and validator exists
+            if self.config.enable_validation and self.validator:
                 is_valid, error = self.validator.validate_market_price(
                     self.config.symbol, 
                     price
@@ -373,13 +380,14 @@ class EnhancedPriceFeed:
                 if source in self.prices:
                     old_price_data = self.prices[source]
                     if not old_price_data.is_stale(self.config.max_price_age):
-                        ok, error = self.circuit_breaker.check_price_movement(
-                            f"{self.config.symbol}_{source.value}",
-                            price
-                        )
-                        if not ok:
-                            logger.error(f"Circuit breaker triggered: {error}")
-                            return
+                        if self.circuit_breaker:
+                            ok, error = self.circuit_breaker.check_price_movement(
+                                f"{self.config.symbol}_{source.value}",
+                                price
+                            )
+                            if not ok:
+                                logger.error(f"Circuit breaker triggered: {error}")
+                                return
             
             # Store price data
             price_data = PriceData(
@@ -402,12 +410,13 @@ class EnhancedPriceFeed:
                 self.price_source = source
                 self.price_updates += 1
                 
-                # Update validator reference price
-                self.validator.update_reference_price(
-                    self.config.symbol,
-                    price,
-                    source.value
-                )
+                # Update validator reference price if validator exists
+                if self.validator:
+                    self.validator.update_reference_price(
+                        self.config.symbol,
+                        price,
+                        source.value
+                    )
                 
                 logger.debug(f"Price updated for {self.config.symbol}: "
                            f"{price} from {source.value}")
@@ -586,9 +595,9 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
     else:
         sources.append(PriceSource.BINANCE)
     
-    # Create configuration
+    # Create configuration (keep underscore format for consistency)
     config = PriceFeedConfig(
-        symbol=f"{base}/{quote}",
+        symbol=f"{base}_{quote}",
         sources=sources,
         primary_source=primary_source,
         max_price_age=settings.get('timeout', 30),
@@ -609,7 +618,20 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
         )
     
     # Create validator and circuit breaker
-    validator = PriceSafetyValidator(bounds) if bounds else None
+    if bounds:
+        validator = PriceSafetyValidator(bounds)
+    else:
+        # Create a validator with permissive default bounds
+        default_bounds = PriceBounds(
+            min_price=0.00001,
+            max_price=1000000,
+            max_spread_percent=0.50,  # 50% max spread
+            max_price_deviation_percent=0.50,  # 50% max deviation
+            stale_price_timeout=60  # 60 seconds
+        )
+        validator = PriceSafetyValidator(default_bounds)
+        logger.warning(f"No safety bounds configured for {market}, using permissive defaults")
+    
     circuit_breaker = CircuitBreaker()
     
     # Create shutdown manager
@@ -636,7 +658,7 @@ async def _update_globals_loop():
                 marketPrice = price
                 lastUpdate = time.time()
                 
-                # For WBTC pairs, update ETH price tracking
+                # For ETH pairs, update ETH price tracking
                 if 'ETH' in _global_price_feed.config.symbol:
                     ethUsdtPrice = price
                     lastUpdateEth = time.time()
