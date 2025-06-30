@@ -163,7 +163,7 @@ class EnhancedBotManager:
                     logger.warning(f"Circuit breaker active: {breaker_status}")
                     
                     # Wait for cooldown with interruptible sleep
-                    cooldown = breaker_status.get('cooldown_remaining', 60)
+                    cooldown = breaker_status.get('cooldown_remaining', 30)
                     logger.info(f"Waiting {cooldown}s for circuit breaker cooldown")
                     
                     if await self.shutdown.wait_with_timeout(cooldown):

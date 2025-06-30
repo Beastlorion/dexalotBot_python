@@ -418,12 +418,26 @@ class MarketMaker:
         try:
             await self.initialize()
             
-            # Start concurrent tasks
-            await asyncio.gather(
-                price_feeds.startPriceFeed(self.market, self.market_settings),
-                contracts.startDataFeeds(self.pair_obj, self.testnet),
-                self.run_order_updater()
+            # Create tasks so we can cancel them on shutdown
+            tasks = [
+                asyncio.create_task(price_feeds.startPriceFeed(self.market, self.market_settings)),
+                asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet)),
+                asyncio.create_task(self.run_order_updater())
+            ]
+            
+            # Wait for any task to complete or shutdown
+            done, pending = await asyncio.wait(
+                tasks,
+                return_when=asyncio.FIRST_COMPLETED
             )
+            
+            # If order updater exits (due to shutdown), cancel other tasks
+            for task in pending:
+                task.cancel()
+            
+            # Wait for cancellation with timeout
+            if pending:
+                await asyncio.wait(pending, timeout=2.0)
             
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt received in market maker, initiating graceful shutdown")
