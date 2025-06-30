@@ -475,9 +475,9 @@ class MarketMaker:
             elif completed_task == data_feed_task:
                 logger.warning("Data feed task finished unexpectedly")
             
-            # If order updater is still running and either price feed or data feed stopped,
-            # we should stop the order updater as it can't function properly without them
-            if completed_task in [price_feed_task, data_feed_task] and not order_updater_task.done():
+            # If order updater is still running and the data feed has stopped,
+            # we should stop the order updater as it can't function properly without it
+            if completed_task in [data_feed_task] and not order_updater_task.done():
                 logger.warning("Critical task stopped, shutting down order updater")
                 self.request_shutdown()
                 
