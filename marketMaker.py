@@ -156,6 +156,10 @@ class MarketMaker:
         logger.info('Starting order updater')
         
         while not self.shutdown_requested and contracts.status and not self.shutdown_event.is_set():
+            # Log loop conditions periodically
+            if time.time() % 30 < 0.1:  # Log every ~30 seconds
+                logger.debug(f"Order updater loop - shutdown_requested: {self.shutdown_requested}, "
+                           f"contracts.status: {contracts.status}, shutdown_event: {self.shutdown_event.is_set()}")
             try:
                 # Check data freshness
                 if not self._is_data_fresh(timeout):
@@ -187,9 +191,11 @@ class MarketMaker:
                 
                 # Execute updates if needed
                 if levels_to_update > 0 or taker_buy or taker_sell:
+                    logger.debug(f"Executing order updates - levels: {levels_to_update}, taker_buy: {taker_buy}, taker_sell: {taker_sell}")
                     success = await self._execute_order_updates(
                         market_price, levels, levels_to_update, taker_buy, taker_sell, priority_gwei
                     )
+                    logger.debug(f"Order update result: {success}")
                     
                     if success:
                         self._handle_successful_update(levels, levels_to_update, market_price)
@@ -197,6 +203,7 @@ class MarketMaker:
                         last_priority_gwei = 0
                         reset_orders = False
                     else:
+                        logger.warning(f"Order update failed, handling failure...")
                         reset_orders = await self._handle_failed_update(last_priority_gwei, priority_gwei)
                         last_priority_gwei = priority_gwei
                 
@@ -224,6 +231,9 @@ class MarketMaker:
                 except asyncio.TimeoutError:
                     pass  # Continue with next iteration
         
+        # Log why we exited the loop
+        logger.info(f"Order updater exiting - shutdown_requested: {self.shutdown_requested}, "
+                   f"contracts.status: {contracts.status}, shutdown_event: {self.shutdown_event.is_set()}")
         logger.info("Order updater stopped")
     
     def _is_data_fresh(self, timeout: int) -> bool:

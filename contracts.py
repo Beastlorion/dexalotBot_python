@@ -464,10 +464,12 @@ async def handleWebscokets(pairObj, testnet):
             logger.warning(f"[WEBSOCKET] Connection closed error after {message_count} messages: {e}")
             break
           except Exception as error:
-            logger.error(f"[WEBSOCKET] Error processing message #{message_count}: {error}")
-            if parsed['type'] == "orderStatusUpdateEvent":
-              print("FAILED ORDER TRACKING:", parsed['data'], error)
-              status = False
+            logger.error(f"[WEBSOCKET] Error processing message #{message_count}: {error}", exc_info=True)
+            if 'parsed' in locals() and parsed.get('type') == "orderStatusUpdateEvent":
+              logger.error(f"[WEBSOCKET] FAILED ORDER TRACKING: {parsed.get('data', 'unknown')}")
+              print("FAILED ORDER TRACKING:", parsed.get('data', 'unknown'), error)
+              # Don't set status = False here - let the bot handle the error gracefully
+              # status = False
             continue
         
         logger.info(f"[WEBSOCKET] Exiting inner loop - status={status}, reconnect={reconnect}, messages={message_count}")
@@ -543,8 +545,10 @@ def handleEvents(event):
       print("ACTIVE ORDERS:",activeOrders)
       pendingTransactions.remove(tx)
   except Exception as error:
+    logger.error(f"[CONTRACTS] Error in blockfilter handleEvents: {error}", exc_info=True)
     print("error in blockfilter handleEvents:", error)
-    status = False
+    # Don't set status = False here - this is too aggressive for error handling
+    # status = False
     return
   return
     
@@ -584,6 +588,7 @@ def getBalances(base, quote, pairObj):
       incrementNonce()
       contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
     elif contracts["ALOT"]["portfolioAvail"] < 100:
+      logger.critical("[CONTRACTS] OUT OF GAS AND ALOT IN PORTFOLIO - STOPPING BOT")
       print("OUT OF GAS AND ALOT IN PORTFOLIO")
       status = False
     

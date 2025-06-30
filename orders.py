@@ -193,12 +193,8 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
   logger.info(f"[ORDERS] Canceling all orders for {pairStr}, shuttingDown={shuttingDown}")
-  
-  # During shutdown, reduce delays for faster cleanup
-  if shuttingDown:
-    await asyncio.sleep(1)
-  else:
-    await asyncio.sleep(4)
+
+  await asyncio.sleep(4)
   
   logger.info(f"[ORDERS] Fetching open orders...")
   openOrders = await getOpenOrders(pairStr, False, shuttingDown)
