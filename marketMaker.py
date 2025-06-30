@@ -417,25 +417,46 @@ class MarketMaker:
             await self.initialize()
             
             # Create tasks so we can cancel them on shutdown
-            tasks = [
-                asyncio.create_task(price_feeds.startPriceFeed(self.market, self.market_settings)),
-                asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet)),
-                asyncio.create_task(self.run_order_updater())
-            ]
+            price_feed_task = asyncio.create_task(price_feeds.startPriceFeed(self.market, self.market_settings))
+            data_feed_task = asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet))
+            order_updater_task = asyncio.create_task(self.run_order_updater())
             
-            # Wait for any task to complete or shutdown
+            tasks = [price_feed_task, data_feed_task, order_updater_task]
+            
+            # Wait for any task to complete
             done, pending = await asyncio.wait(
                 tasks,
                 return_when=asyncio.FIRST_COMPLETED
             )
             
-            # If order updater exits (due to shutdown), cancel other tasks
-            for task in pending:
-                task.cancel()
+            # Check which task completed
+            completed_task = list(done)[0]
+            
+            # Only cancel other tasks if order updater finished
+            if completed_task == order_updater_task:
+                logger.info("Order updater finished, cancelling other tasks")
+                for task in pending:
+                    task.cancel()
+            else:
+                # If price feed or data feed finished, log it but keep order updater running
+                task_name = "price feed" if completed_task == price_feed_task else "data feed"
+                logger.warning(f"{task_name} task finished unexpectedly, but keeping order updater running")
+                
+                # Wait for order updater to finish
+                try:
+                    await order_updater_task
+                except Exception as e:
+                    logger.error(f"Order updater error: {e}")
+                
+                # Now cancel remaining tasks
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
             
             # Wait for cancellation with timeout
-            if pending:
-                await asyncio.wait(pending, timeout=2.0)
+            pending_tasks = [t for t in tasks if not t.done()]
+            if pending_tasks:
+                await asyncio.wait(pending_tasks, timeout=2.0)
             
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt received in market maker, initiating graceful shutdown")

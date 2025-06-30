@@ -34,10 +34,6 @@ async def getOpenOrders(pair,refreshActiveOrders = False, shuttingDown = False):
   global openOrders
   logger.info(f"[ORDERS] Getting open orders for {pair}, refreshActiveOrders={refreshActiveOrders}, shuttingDown={shuttingDown}")
   try:
-    # Only skip if we're NOT in shutdown mode (during shutdown we need to fetch orders)
-    if not shuttingDown and hasattr(contracts, 'status') and not contracts.status:
-      logger.warning("[ORDERS] Skipping getOpenOrders - market stopped")
-      return {"rows": []}
     
     signedApiUrl = config.get("fuji_signedApiUrl") if testnet else config.get("signedApiUrl")
     url = signedApiUrl + "orders?pair=" + pair + "&category=0"
@@ -45,7 +41,9 @@ async def getOpenOrders(pair,refreshActiveOrders = False, shuttingDown = False):
     # Use aiohttp for async HTTP request
     import aiohttp
     async with aiohttp.ClientSession() as session:
+      # Use the global signature from contracts module
       headers = {'x-signature': contracts.signature}
+      logger.debug(f"[ORDERS] Making API request to: {url}")
       async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as response:
         if response.status != 200:
           logger.error(f"[ORDERS] API returned status {response.status}: {await response.text()}")
