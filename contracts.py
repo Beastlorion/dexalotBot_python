@@ -18,6 +18,8 @@ import orders
 from config import config
 import urllib.request
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 from web3 import Web3, AsyncWeb3, AsyncHTTPProvider
 from eth_utils.units import units, decimal
 from eth_account import Account
@@ -261,11 +263,28 @@ def getRates(pairObj,pairByte32):
   print('Taker Rate BP:',takerRate)
   
 async def startDataFeeds(pairObj, testnet):
-  c = asyncio.create_task(handleWebscokets(pairObj, testnet))
-  await asyncio.gather(c)
+  logger.info(f"[DATA_FEED] Starting data feeds for pair: {pairObj['pair']}")
+  try:
+    c = asyncio.create_task(handleWebscokets(pairObj, testnet))
+    logger.info(f"[DATA_FEED] Created websocket handler task: {c}")
+    results = await asyncio.gather(c, return_exceptions=True)
+    
+    # Check if task failed
+    if results[0] is not None:
+      if isinstance(results[0], Exception):
+        logger.error(f"[DATA_FEED] WebSocket handler failed with exception: {results[0]}")
+      else:
+        logger.info(f"[DATA_FEED] WebSocket handler completed with result: {results[0]}")
+    
+    logger.info("[DATA_FEED] Data feeds completed")
+  except Exception as e:
+    logger.error(f"[DATA_FEED] Failed to start data feeds: {e}", exc_info=True)
+    raise
     
 async def handleWebscokets(pairObj, testnet):
   global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel
+  
+  logger.info(f"[WEBSOCKET] Starting WebSocket handler for {pairObj['pair']}")
   base = pairObj['pair'].split('/')[0]
   quote = pairObj['pair'].split('/')[1]
   baseDecimals = pairObj['basedisplaydecimals']
@@ -276,6 +295,10 @@ async def handleWebscokets(pairObj, testnet):
   tradereventunsubscribe = {"type":"tradereventunsubscribe", "signature":signature}
   wsUrl = "wss://api.dexalot-test.com" if testnet else "wss://api.dexalot.com"
   
+  logger.info(f"[WEBSOCKET] WebSocket URL: {wsUrl}")
+  logger.info(f"[WEBSOCKET] Initial status: {status}")
+  
+  connection_attempts = 0
   while status:
     reconnect = False
     try:
@@ -287,11 +310,23 @@ async def handleWebscokets(pairObj, testnet):
         #wsUrl = "wss://api.dexalot.com/api/ws?wstoken=" + token
         wsUrl = "wss://api.dexalot.com?wstoken=" + token
 
+      connection_attempts += 1
+      logger.info(f"[WEBSOCKET] Attempting WebSocket connection (attempt #{connection_attempts})")
+      
       async with websockets.connect(wsUrl) as websocket:
+        logger.info(f"[WEBSOCKET] Connected successfully to {wsUrl}")
+        
         await websocket.send(json.dumps(subscribeBook))
+        logger.info(f"[WEBSOCKET] Sent subscribe book: {subscribeBook}")
+        
         await websocket.send(json.dumps(tradereventsubscribe))
+        logger.info(f"[WEBSOCKET] Sent trade event subscribe")
+        
         print("dexalotOrderFeed and dexalotBookFeed START")
+        
+        message_count = 0
         while status and not reconnect:
+          message_count += 1
           try:
             # Add timeout to make recv interruptible
             message = str(await asyncio.wait_for(websocket.recv(), timeout=1.0))
@@ -419,23 +454,32 @@ async def handleWebscokets(pairObj, testnet):
           except asyncio.TimeoutError:
             # Timeout is normal - just check if we should shutdown
             if not status:
+              logger.info(f"[WEBSOCKET] Exiting loop due to status=False after {message_count} messages")
               break
             continue
-          except websockets.ConnectionClosed:
+          except websockets.ConnectionClosed as e:
+            logger.warning(f"[WEBSOCKET] Connection closed after {message_count} messages: {e}")
             break
-          except websockets.ConnectionClosedError:
+          except websockets.ConnectionClosedError as e:
+            logger.warning(f"[WEBSOCKET] Connection closed error after {message_count} messages: {e}")
             break
           except Exception as error:
+            logger.error(f"[WEBSOCKET] Error processing message #{message_count}: {error}")
             if parsed['type'] == "orderStatusUpdateEvent":
               print("FAILED ORDER TRACKING:", parsed['data'], error)
               status = False
             continue
+        
+        logger.info(f"[WEBSOCKET] Exiting inner loop - status={status}, reconnect={reconnect}, messages={message_count}")
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
         await asyncio.sleep(0.05)
     except Exception as error:
+      logger.error(f'[WEBSOCKET] Error during handleWebscokets: {error}', exc_info=True)
       print('error during handleWebscokets:',error)
       await asyncio.sleep(0.1)
+  
+  logger.info(f"[WEBSOCKET] Exiting handleWebscokets - final status={status}, attempts={connection_attempts}")
       
 async def log_loop(event_filter, poll_interval):
   print("start block filter")

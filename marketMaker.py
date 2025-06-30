@@ -210,7 +210,7 @@ class MarketMaker:
                 
                 # Use shutdown event for more responsive shutdown
                 try:
-                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=1.0)
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=0.01)
                     break  # Shutdown event was set
                 except asyncio.TimeoutError:
                     pass  # Continue with next iteration
@@ -453,8 +453,8 @@ class MarketMaker:
             else:
                 raise  # Re-raise to let main.py handle restart
         finally:
-            if not self.shutdown_requested:
-                self.request_shutdown()
+            # Only request shutdown if we're not already shutting down
+            # Remove the automatic shutdown in finally block
             await asyncio.sleep(2)
 
 # Module-level variables for backward compatibility

@@ -54,28 +54,49 @@ class PriceFeedManager:
             quote = tools.getSymbolFromName(market, 1)
             self.global_base = base
             
-            logger.info(f"Starting price feed for {base}/{quote}")
+            logger.info(f"[PRICE_FEED] Starting price feed for {base}/{quote}")
+            logger.info(f"[PRICE_FEED] Settings: useVolSpread={settings.get('useVolSpread')}, "
+                       f"useCustomPrice={settings.get('useCustomPrice')}, "
+                       f"useBybitPrice={settings.get('useBybitPrice')}")
             
             # Start various price feeds based on configuration
             tasks = []
             
             if settings.get('useVolSpread', False):
+                logger.info("[PRICE_FEED] Adding volatility spread task")
                 tasks.append(self._get_vol_spread(base, quote))
             
             if settings.get('useCustomPrice', False):
+                logger.info("[PRICE_FEED] Adding custom price task")
                 tasks.append(self._get_custom_price(base, quote))
             elif not settings.get('useBybitPrice', False):
-                tasks.extend(await self._setup_binance_feeds(base, quote))
+                logger.info("[PRICE_FEED] Setting up Binance feeds")
+                binance_tasks = await self._setup_binance_feeds(base, quote)
+                logger.info(f"[PRICE_FEED] Created {len(binance_tasks)} Binance tasks")
+                tasks.extend(binance_tasks)
             
             if settings.get('useBybitPrice', False):
-                tasks.extend(self._setup_bybit_feeds(base, quote))
+                logger.info("[PRICE_FEED] Setting up Bybit feeds")
+                bybit_tasks = self._setup_bybit_feeds(base, quote)
+                logger.info(f"[PRICE_FEED] Created {len(bybit_tasks)} Bybit tasks")
+                tasks.extend(bybit_tasks)
             
             # Start all price feed tasks
             if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+                logger.info(f"[PRICE_FEED] Starting {len(tasks)} price feed tasks with asyncio.gather")
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Check for exceptions in results
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        logger.error(f"[PRICE_FEED] Task {i} failed with exception: {result}")
+                
+                logger.info("[PRICE_FEED] All price feed tasks completed")
+            else:
+                logger.warning("[PRICE_FEED] No price feed tasks were created!")
                 
         except Exception as e:
-            logger.error(f"Failed to start price feed: {e}")
+            logger.error(f"[PRICE_FEED] Failed to start price feed: {e}", exc_info=True)
             raise
     
     async def _setup_binance_feeds(self, base: str, quote: str) -> list:
@@ -358,15 +379,33 @@ def update_globals():
 
 async def startPriceFeed(market: str, settings: Dict[str, Any]):
     """Legacy function for backward compatibility."""
-    await _price_feed_manager.start_price_feed(market, settings)
+    logger.info(f"[PRICE_FEED] Starting price feed for {market}")
+    try:
+        await _price_feed_manager.start_price_feed(market, settings)
+        logger.info(f"[PRICE_FEED] Successfully started price feed manager for {market}")
+    except Exception as e:
+        logger.error(f"[PRICE_FEED] Failed to start price feed manager: {e}")
+        raise
     
     # Update global variables periodically
     async def update_loop():
-        while contracts.status:
-            update_globals()
-            await asyncio.sleep(0.1)
+        logger.info("[PRICE_FEED] Starting global variable update loop")
+        loop_iterations = 0
+        try:
+            while contracts.status:
+                update_globals()
+                loop_iterations += 1
+                if loop_iterations % 100 == 0:  # Log every 10 seconds
+                    logger.debug(f"[PRICE_FEED] Update loop still running (iteration {loop_iterations})")
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.error(f"[PRICE_FEED] Update loop crashed after {loop_iterations} iterations: {e}")
+            raise
+        finally:
+            logger.info(f"[PRICE_FEED] Update loop exiting after {loop_iterations} iterations. contracts.status = {contracts.status}")
     
-    asyncio.create_task(update_loop())
+    task = asyncio.create_task(update_loop())
+    logger.info(f"[PRICE_FEED] Created update loop task: {task}")
 
 def getMarketPrice() -> float:
     """Legacy function for backward compatibility."""

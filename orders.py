@@ -137,7 +137,7 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
       
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
-  await asyncio.sleep(2)
+  await asyncio.sleep(4)
   openOrders = await getOpenOrders(pairStr)
   i = 0
   orderIDs = []
