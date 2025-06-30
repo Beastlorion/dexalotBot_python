@@ -262,14 +262,22 @@ class EnhancedBotManager:
             
             # Cancel orders BEFORE shutting down tasks and connections
             if self.market_pair and hasattr(orders, 'cancelAllOrders'):
-                logger.info(f"Cancelling all orders before shutdown for {self.market_pair}")
+                logger.info(f"[SHUTDOWN] Starting order cancellation for {self.market_pair}")
                 try:
-                    await asyncio.wait_for(orders.cancelAllOrders(self.market_pair, True), timeout=10.0)
-                    logger.info("All orders cancelled successfully")
+                    # Give more time for order cancellation during shutdown
+                    result = await asyncio.wait_for(orders.cancelAllOrders(self.market_pair, True), timeout=20.0)
+                    if result:
+                        logger.info("[SHUTDOWN] All orders cancelled successfully")
+                    else:
+                        logger.warning("[SHUTDOWN] Order cancellation completed with issues")
                 except asyncio.TimeoutError:
-                    logger.warning("Order cancellation timed out")
+                    logger.error("[SHUTDOWN] Order cancellation timed out after 20 seconds")
                 except Exception as e:
-                    logger.error(f"Error cancelling orders: {e}")
+                    logger.error(f"[SHUTDOWN] Error cancelling orders: {e}", exc_info=True)
+                
+                # Add a small delay to ensure transaction propagation
+                await asyncio.sleep(1)
+                logger.info("[SHUTDOWN] Order cancellation phase complete")
             
             # Now stop all market making activities
             if hasattr(contracts, 'status'):
