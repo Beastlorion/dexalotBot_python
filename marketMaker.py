@@ -160,23 +160,15 @@ class MarketMaker:
                 # Check data freshness
                 if not self._is_data_fresh(timeout):
                     logger.warning("Market data is stale, waiting...")
-                    # Use shutdown event for more responsive shutdown
-                    try:
-                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=1.0)
-                        break  # Shutdown event was set
-                    except asyncio.TimeoutError:
-                        continue
+                    await asyncio.sleep(1.0)
+                    continue
                 
                 market_price = self._get_adjusted_market_price()
                 
                 if not self._is_market_data_ready(market_price):
                     logger.info("Waiting for market data...")
-                    # Use shutdown event for more responsive shutdown
-                    try:
-                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=2.0)
-                        break  # Shutdown event was set
-                    except asyncio.TimeoutError:
-                        continue
+                    await asyncio.sleep(2.0)
+                    continue
                 
                 # Handle pending operations
                 await self._handle_pending_operations()
@@ -208,12 +200,8 @@ class MarketMaker:
                         reset_orders = await self._handle_failed_update(last_priority_gwei, priority_gwei)
                         last_priority_gwei = priority_gwei
                 
-                # Use shutdown event for more responsive shutdown
-                try:
-                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=0.01)
-                    break  # Shutdown event was set
-                except asyncio.TimeoutError:
-                    pass  # Continue with next iteration
+                # Small delay between iterations
+                await asyncio.sleep(0.01)
                 
             except KeyboardInterrupt:
                 logger.info("KeyboardInterrupt received in order updater, initiating graceful shutdown")
