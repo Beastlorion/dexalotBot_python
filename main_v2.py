@@ -17,6 +17,7 @@ import analytics
 import marketMaker
 import orders
 import contracts
+import tools
 
 # Configure logging
 logging.basicConfig(
