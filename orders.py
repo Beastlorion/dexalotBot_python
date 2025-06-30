@@ -34,12 +34,25 @@ async def getOpenOrders(pair,refreshActiveOrders = False):
   global openOrders
   logger.info(f"[ORDERS] Getting open orders for {pair}, refreshActiveOrders={refreshActiveOrders}")
   try:
+    # Check if we're shutting down before making API call
+    if hasattr(contracts, 'status') and not contracts.status:
+      logger.warning("[ORDERS] Skipping getOpenOrders - shutdown in progress")
+      return {"rows": []}
+    
     signedApiUrl = config.get("fuji_signedApiUrl") if testnet else config.get("signedApiUrl")
     url = signedApiUrl + "orders?pair=" + pair + "&category=0"
-    req = Request(url)
-    req.add_header('x-signature', contracts.signature)
-    openOrdersJson = urlopen(req).read()
-    openOrders = json.loads(openOrdersJson)
+    
+    # Use aiohttp for async HTTP request
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+      headers = {'x-signature': contracts.signature}
+      async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as response:
+        if response.status != 200:
+          logger.error(f"[ORDERS] API returned status {response.status}: {await response.text()}")
+          return {"rows": []}
+        openOrdersJson = await response.text()
+        openOrders = json.loads(openOrdersJson)
+    
     logger.info(f"[ORDERS] Retrieved {len(openOrders.get('rows', []))} open orders")
     if len(contracts.activeOrders)>0 and refreshActiveOrders:
       trackedOrderIDs = []
@@ -102,6 +115,11 @@ async def cancelOrderList(orderIDs, priorityGwei):
   if len(orderIDs) == 0:
     logger.debug("[ORDERS] No orders to cancel")
     return False
+  
+  # Check if we're shutting down
+  if hasattr(contracts, 'status') and not contracts.status:
+    logger.warning("[ORDERS] Shutdown in progress, attempting quick cancel")
+  
   try:
     # cancelTxGasest = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelOrderList(orderIDs).estimate_gas();
     gas = len(orderIDs) * 500000
@@ -112,9 +130,11 @@ async def cancelOrderList(orderIDs, priorityGwei):
     print("CANCEL ORDER LIST RESPONSE: ", response)
     cancelOrderCount = cancelOrderCount + len(orderIDs)
     logger.info(f"[ORDERS] Successfully cancelled {len(orderIDs)} orders. Total cancelled: {cancelOrderCount}")
+    return True
   except Exception as error:
     logger.error(f"[ORDERS] Error in cancelOrderList: {error}", exc_info=True)
     print("error in cancelOrderList", error)
+    return False
   # print("cancelOrderList response:", response.hex(), round(time.time()))
   
 async def cancelOrderLevels(pairStr, levelsToUpdate):
@@ -158,17 +178,32 @@ async def cancelOrderLevels(pairStr, levelsToUpdate):
 
 async def cancelAllOrders(pairStr,shuttingDown = False):
   logger.info(f"[ORDERS] Canceling all orders for {pairStr}, shuttingDown={shuttingDown}")
-  await asyncio.sleep(4)
+  
+  # During shutdown, reduce delays for faster cleanup
+  if shuttingDown:
+    await asyncio.sleep(1)
+  else:
+    await asyncio.sleep(4)
+  
   openOrders = await getOpenOrders(pairStr)
   i = 0
   orderIDs = []
-  for order in openOrders["rows"]:
+  for order in openOrders.get("rows", []):
     orderIDs.append(order["id"])
-  logger.info(f"[ORDERS] Found {len(orderIDs)} orders to cancel")
-  await cancelOrderList(orderIDs,1)
-  await asyncio.sleep(3)
-  openOrders = await getOpenOrders(pairStr)
-  logger.info(f"[ORDERS] After cancellation, {len(openOrders.get('rows', []))} orders remain")
+  
+  if len(orderIDs) > 0:
+    logger.info(f"[ORDERS] Found {len(orderIDs)} orders to cancel")
+    await cancelOrderList(orderIDs,1)
+    
+    # Skip verification during shutdown to avoid HTTP 400 errors
+    if not shuttingDown:
+      await asyncio.sleep(3)
+      openOrders = await getOpenOrders(pairStr)
+      logger.info(f"[ORDERS] After cancellation, {len(openOrders.get('rows', []))} orders remain")
+    else:
+      logger.info(f"[ORDERS] Skipping verification during shutdown")
+  else:
+    logger.info(f"[ORDERS] No orders to cancel")
   
 def generateBuyOrders(marketPrice,settings,totalQuoteFunds,totalFunds,pairObj, levels, levelsToUpdate, availQuoteFunds, myAsks):
   logger.debug(f"[ORDERS] Generating buy orders - marketPrice: {marketPrice}, levelsToUpdate: {levelsToUpdate}")
