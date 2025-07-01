@@ -43,6 +43,7 @@ class PriceFeedConfig:
     price_deviation_threshold: float = 0.05  # 5%
     enable_validation: bool = True
     custom_price_url: Optional[str] = None
+    reconnect_timeout: int = 15  # seconds before reconnecting stale feeds
 
 
 class EnhancedPriceFeed:
@@ -75,6 +76,11 @@ class EnhancedPriceFeed:
         self.websocket_manager = WebSocketManager(shutdown_manager)
         self.binance_client: Optional[AsyncClient] = None
         
+        # Heartbeat monitoring
+        self._source_last_update: Dict[PriceSource, float] = {}
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._reconnect_timeout = config.reconnect_timeout
+        
         logger.info(f"Enhanced price feed initialized for {config.symbol}")
     
     async def start(self):
@@ -100,6 +106,10 @@ class EnhancedPriceFeed:
             # Start all feeds concurrently
             if start_tasks:
                 await asyncio.gather(*start_tasks, return_exceptions=True)
+            
+            # Start heartbeat monitoring
+            self._heartbeat_task = asyncio.create_task(self._monitor_heartbeat())
+            self.shutdown.register_task(self._heartbeat_task, f"heartbeat-{self.config.symbol}")
             
             logger.info(f"Price feed started for {self.config.symbol}")
             
@@ -404,6 +414,9 @@ class EnhancedPriceFeed:
                 price = float(data.get('price', 0))
                 if price > 0:
                     await self._update_price(PriceSource.CUSTOM, price)
+                else:
+                    # Still update heartbeat even if price is invalid
+                    self._source_last_update[PriceSource.CUSTOM] = time.time()
         except Exception as e:
             logger.error(f"Error processing custom data: {e}")
             self._record_source_failure(PriceSource.CUSTOM)
@@ -443,6 +456,9 @@ class EnhancedPriceFeed:
                 source=source.value
             )
             self.prices[source] = price_data
+            
+            # Update heartbeat timestamp
+            self._source_last_update[source] = time.time()
             
             # Update current price if this is primary source or better
             should_update = (
@@ -532,9 +548,91 @@ class EnhancedPriceFeed:
             "available_sources": list(self.prices.keys())
         }
     
+    async def _monitor_heartbeat(self):
+        """Monitor price feed heartbeat and reconnect if stale"""
+        logger.info(f"Starting heartbeat monitor for {self.config.symbol}")
+        
+        while not self.shutdown.is_shutdown_requested():
+            try:
+                current_time = time.time()
+                
+                # Check each active source
+                for source in self.config.sources:
+                    last_update = self._source_last_update.get(source, 0)
+                    time_since_update = current_time - last_update
+                    
+                    # If we haven't received an update in reconnect_timeout seconds
+                    if last_update > 0 and time_since_update > self._reconnect_timeout:
+                        logger.warning(f"{source.value} feed stale ({time_since_update:.1f}s since last update), reconnecting...")
+                        
+                        # Attempt to reconnect based on source
+                        try:
+                            if source == PriceSource.BINANCE:
+                                await self._reconnect_binance()
+                            elif source == PriceSource.BYBIT:
+                                await self._reconnect_bybit()
+                            elif source == PriceSource.CUSTOM:
+                                # Custom feed uses polling, so just reset the timestamp
+                                self._source_last_update[source] = current_time
+                        except Exception as e:
+                            logger.error(f"Failed to reconnect {source.value}: {e}")
+                            self._record_source_failure(source)
+                
+                # Check every 5 seconds
+                await asyncio.sleep(5.0)
+                
+            except Exception as e:
+                logger.error(f"Error in heartbeat monitor: {e}")
+                await asyncio.sleep(5.0)
+        
+        logger.info(f"Heartbeat monitor stopped for {self.config.symbol}")
+    
+    async def _reconnect_binance(self):
+        """Reconnect Binance WebSocket"""
+        logger.info("Reconnecting Binance feed...")
+        
+        # Close existing client
+        if self.binance_client:
+            try:
+                await self.binance_client.close_connection()
+            except:
+                pass
+            self.binance_client = None
+        
+        # Reset last update time to prevent immediate reconnect loop
+        self._source_last_update[PriceSource.BINANCE] = time.time()
+        
+        # Restart the feed
+        await self._start_binance_feed()
+    
+    async def _reconnect_bybit(self):
+        """Reconnect Bybit WebSocket"""
+        logger.info("Reconnecting Bybit feed...")
+        
+        # Stop existing connection
+        ws_name = f"bybit-{self.config.symbol}"
+        await self.websocket_manager.stop_connection(ws_name)
+        
+        # Reset last update time to prevent immediate reconnect loop
+        self._source_last_update[PriceSource.BYBIT] = time.time()
+        
+        # Small delay before reconnecting
+        await asyncio.sleep(1.0)
+        
+        # Restart the feed
+        await self._start_bybit_feed()
+    
     async def stop(self):
         """Stop price feed"""
         logger.info(f"Stopping price feed for {self.config.symbol}")
+        
+        # Stop heartbeat monitor
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
         
         # Stop WebSocket connections
         await self.websocket_manager.stop_all()
@@ -649,7 +747,8 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
         primary_source=primary_source,
         max_price_age=settings.get('timeout', 30),
         enable_validation=True,
-        custom_price_url=settings.get('customPriceUrl', 'http://localhost:3000/prices')
+        custom_price_url=settings.get('customPriceUrl', 'http://localhost:3000/prices'),
+        reconnect_timeout=settings.get('priceFeedReconnectTimeout', 15)
     )
     
     # Create components

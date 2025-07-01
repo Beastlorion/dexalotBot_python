@@ -280,6 +280,19 @@ class WebSocketManager:
         
         logger.info(f"Stopped WebSocket connection: {name}")
     
+    async def restart_connection(self, name: str):
+        """Restart a WebSocket connection"""
+        logger.info(f"Restarting WebSocket connection: {name}")
+        
+        # Stop existing connection
+        await self.stop_connection(name)
+        
+        # Small delay before restarting
+        await asyncio.sleep(0.5)
+        
+        # Start new connection
+        await self.start_connection(name)
+    
     async def start_all(self):
         """Start all registered connections"""
         for name in self.connections:
