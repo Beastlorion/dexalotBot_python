@@ -152,6 +152,7 @@ class MarketMaker:
         last_priority_gwei = 0
         
         timeout = self.market_settings.get('timeout', 30)
+        stale_price_handled = False  # Track if we've already cancelled orders due to stale price
         
         logger.info('Starting order updater')
         
@@ -163,9 +164,28 @@ class MarketMaker:
             try:
                 # Check data freshness
                 if not self._is_data_fresh(timeout):
-                    logger.warning("Market data is stale, waiting...")
+                    # Cancel all orders if this is the first time price became stale
+                    if not stale_price_handled:
+                        logger.warning("Market data is stale, cancelling all open orders...")
+                        try:
+                            await orders.cancelAllOrders(self.pair_str, shuttingDown=False)
+                            logger.info("All orders cancelled due to stale price data")
+                            stale_price_handled = True
+                            contracts.activeOrders = []  # Clear active orders list
+                            await asyncio.sleep(2.0)  # Give time for cancellations to process
+                        except Exception as e:
+                            logger.error(f"Failed to cancel orders due to stale price: {e}")
+                    else:
+                        logger.debug("Market data still stale, waiting for fresh price...")
+                    
                     await asyncio.sleep(1.0)
                     continue
+                else:
+                    # Data is fresh again
+                    if stale_price_handled:
+                        logger.info("Market data is fresh again, resuming normal operations")
+                        stale_price_handled = False
+                        reset_orders = True  # Force order refresh after stale period
                 
                 market_price = self._get_adjusted_market_price()
                 
