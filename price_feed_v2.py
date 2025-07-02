@@ -182,7 +182,7 @@ class EnhancedPriceFeed:
             base, quote = parts
             
             # For Bybit, we need to convert USDC quotes to USDT
-            if quote == 'USDC':
+            if quote == 'USDC' and base != 'USDT':
                 # We'll get base/USDT price and USDC/USDT price
                 bybit_symbol = f"{base}USDT"
                 need_usdc_conversion = True
