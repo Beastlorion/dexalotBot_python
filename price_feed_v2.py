@@ -258,7 +258,7 @@ class EnhancedPriceFeed:
             
             if use_orderbook:
                 # Subscribe to orderbook depth for main symbol
-                subscribe_args = [f"orderbook.50.{bybit_symbol}"]
+                subscribe_args = [f"orderbook.1.{bybit_symbol}"]
                 logger.info(f"Using orderbook data for Bybit {bybit_symbol}")
             else:
                 # Subscribe to public trades for main symbol (default)
@@ -267,7 +267,7 @@ class EnhancedPriceFeed:
             
             # If we need USDC conversion, always use orderbook for USDCUSDT
             if need_usdc_conversion:
-                subscribe_args.append("orderbook.50.USDCUSDT")
+                subscribe_args.append("orderbook.1.USDCUSDT")
                 # Store that we need conversion
                 self._bybit_needs_usdc_conversion = True
                 self._usdc_usdt_price = None
