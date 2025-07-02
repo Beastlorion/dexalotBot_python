@@ -209,17 +209,24 @@ class EnhancedPriceFeed:
                 bybit_symbol = f"{base}{quote}"
                 need_usdc_conversion = False
             
+            # Check if this is a perpetual contract
+            is_perps = self.market_settings.get('perps', False)
+            
             # Set up WebSocket connection
+            # Use linear endpoint for perps, spot endpoint for spot
+            ws_url = "wss://stream.bybit.com/v5/public/linear" if is_perps else "wss://stream.bybit.com/v5/public/spot"
+            
             ws_connection = self.websocket_manager.add_connection(
                 name=f"bybit-{self.config.symbol}",
-                url="wss://stream.bybit.com/v5/public/spot",
+                url=ws_url,
                 recv_timeout=5.0
             )
             
             # Store subscription data for later use
             self._bybit_subscription_data = {
                 'bybit_symbol': bybit_symbol,
-                'need_usdc_conversion': need_usdc_conversion
+                'need_usdc_conversion': need_usdc_conversion,
+                'is_perps': is_perps
             }
             
             # Add message handler that also handles subscription
@@ -234,22 +241,23 @@ class EnhancedPriceFeed:
             ws_connection.add_message_handler(handle_bybit_message)
             
             # Start connection and wait for it to be ready
-            logger.info(f"Starting WebSocket connection for bybit-{self.config.symbol}")
+            logger.info(f"Starting {'perps' if is_perps else 'spot'} WebSocket connection for bybit-{self.config.symbol}")
             await self.websocket_manager.start_connection(f"bybit-{self.config.symbol}")
             
             # Wait for connection to be established
             connected = await ws_connection.wait_for_connection(timeout=5.0)
             
             if not connected:
-                logger.error(f"Bybit WebSocket failed to connect within 5.0s")
+                logger.error(f"Bybit {'perps' if is_perps else 'spot'} WebSocket failed to connect within 5.0s")
                 self._record_source_failure(PriceSource.BYBIT)
                 return
             
-            logger.info(f"Bybit WebSocket connected successfully")
+            logger.info(f"Bybit {'perps' if is_perps else 'spot'} WebSocket connected successfully")
             
             # Now send subscription
             bybit_symbol = self._bybit_subscription_data['bybit_symbol']
             need_usdc_conversion = self._bybit_subscription_data['need_usdc_conversion']
+            is_perps = self._bybit_subscription_data['is_perps']
             
             # Check if we should use orderbook or trade data
             # Default to using trades unless explicitly configured to use orderbook
@@ -262,11 +270,11 @@ class EnhancedPriceFeed:
             if use_orderbook:
                 # Subscribe to orderbook depth for main symbol
                 subscribe_args = [f"orderbook.1.{bybit_symbol}"]
-                logger.info(f"Using orderbook data for Bybit {bybit_symbol}")
+                logger.info(f"Using orderbook data for Bybit {'perps' if is_perps else 'spot'} {bybit_symbol}")
             else:
                 # Subscribe to public trades for main symbol (default)
                 subscribe_args = [f"publicTrade.{bybit_symbol}", f"tickers.{bybit_symbol}"]
-                logger.info(f"Using trade data and tickers for Bybit {bybit_symbol}")
+                logger.info(f"Using trade data and tickers for Bybit {'perps' if is_perps else 'spot'} {bybit_symbol}")
             
             # If we need USDC conversion, always use orderbook for USDCUSDT
             if need_usdc_conversion:
