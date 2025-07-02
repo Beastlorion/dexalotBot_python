@@ -474,10 +474,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   if len(orderIDsToCancel) > 0:
     print("ORDERS TO CANCEL:", orderIDsToCancel)
     await cancelOrderList(orderIDsToCancel, priorityGwei)
-        
-  if len(replaceOrders) == 0 and len(newOrders) == 0 and levelsToUpdate > 0:
-    logger.warning(f"No orders to replace or add, but levelsToUpdate is greater than 0. availQuoteFunds: {availQuoteFunds}, availBaseFunds: {availBaseFunds}")
-    return False
   
   replaceTx = False
   if len(replaceOrders) > 0:
