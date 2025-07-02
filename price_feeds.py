@@ -195,7 +195,7 @@ class EnhancedPriceFeed:
                 return
             
             # For Bybit, we need to convert USDC quotes to USDT
-            if quote == 'USDC' and base != 'USDT':
+            if quote == 'USDC' and base != 'USDT' and base != 'WBTC':
                 # We'll get base/USDT price and USDC/USDT price
                 bybit_symbol = f"{base}USDT"
                 need_usdc_conversion = True
