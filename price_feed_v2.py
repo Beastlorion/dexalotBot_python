@@ -246,8 +246,8 @@ class EnhancedPriceFeed:
                 logger.info(f"Using orderbook data for Bybit {bybit_symbol}")
             else:
                 # Subscribe to public trades for main symbol (default)
-                subscribe_args = [f"publicTrade.{bybit_symbol}"]
-                logger.info(f"Using trade data for Bybit {bybit_symbol}")
+                subscribe_args = [f"publicTrade.{bybit_symbol}", f"tickers.{bybit_symbol}"]
+                logger.info(f"Using trade data and tickers for Bybit {bybit_symbol}")
             
             # If we need USDC conversion, always use orderbook for USDCUSDT
             if need_usdc_conversion:
@@ -361,6 +361,34 @@ class EnhancedPriceFeed:
                     # No conversion needed
                     logger.debug(f"Bybit {symbol} trade price: {trade_price}")
                     await self._update_price(PriceSource.BYBIT, trade_price)
+                        
+            # Handle tickers updates
+            elif topic and topic.startswith('tickers.'):
+                symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT"
+                
+                # Get tickers data
+                ticker_data = data.get('data', {})
+                if not ticker_data:
+                    return
+                
+                lastPrice = float(ticker_data.get('lastPrice', 0))
+                
+                if lastPrice <= 0:
+                    return
+                
+                # Handle USDC conversion if needed
+                if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
+                    # Convert from USDT to USDC
+                    if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
+                        converted_price = lastPrice / self._usdc_usdt_price
+                        logger.debug(f"Bybit {symbol} tickers price: {lastPrice} USDT = {converted_price} USDC")
+                        await self._update_price(PriceSource.BYBIT, converted_price)
+                    else:
+                        logger.warning("Waiting for USDC/USDT price for conversion")
+                else:
+                    # No conversion needed, use lastPrice
+                    logger.debug(f"Bybit {symbol} tickers price: {lastPrice}")
+                    await self._update_price(PriceSource.BYBIT, lastPrice)
             
             # Handle orderbook updates (for USDCUSDT conversion or if orderbook mode is enabled)
             elif topic and topic.startswith('orderbook.'):
@@ -505,6 +533,9 @@ class EnhancedPriceFeed:
             current_data = self.prices[current_source]
             if current_data.is_stale(self.config.max_price_age):
                 return True
+        
+        # If both sources are fresh and from same provider, prefer trade over ticker
+        # This is handled by the order of processing in _process_bybit_data
         
         return False
     

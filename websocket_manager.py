@@ -217,7 +217,7 @@ class WebSocketManager:
         name: str,
         url: str,
         recv_timeout: float = 1.0,
-        reconnect_delay: float = 5.0,
+        reconnect_delay: float = 10.0,
         max_reconnect_attempts: int = 5
     ) -> WebSocketConnection:
         """Add a WebSocket connection"""
