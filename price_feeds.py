@@ -202,6 +202,9 @@ class EnhancedPriceFeed:
             elif quote == 'USDC' and base == 'USDT':
                 bybit_symbol = f"{quote}{base}"
                 need_usdc_conversion = False
+            elif quote == 'USDC' and base == 'WBTC':
+                bybit_symbol = "BTCUSDT"
+                need_usdc_conversion = True
             else:
                 bybit_symbol = f"{base}{quote}"
                 need_usdc_conversion = False
