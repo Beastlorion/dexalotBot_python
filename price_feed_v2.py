@@ -436,8 +436,13 @@ class EnhancedPriceFeed:
                 
                 # Handle USDC/USDT conversion
                 if symbol == 'USDCUSDT':
-                    self._usdc_usdt_price = mid_price
-                    logger.debug(f"Bybit USDC/USDT price: {mid_price}")
+                    if base == 'USDT' and quote == 'USDC':
+                        # No conversion needed
+                        logger.debug(f"Bybit {base}{quote} orderbook price: {1/mid_price}")
+                        await self._update_price(PriceSource.BYBIT, 1/mid_price)
+                    else:
+                        self._usdc_usdt_price = mid_price
+                        logger.debug(f"Bybit USDC/USDT price: {mid_price}")
                 else:
                     # This is our main symbol price (only if using orderbook mode)
                     if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
@@ -449,14 +454,9 @@ class EnhancedPriceFeed:
                         else:
                             logger.warning("Waiting for USDC/USDT price for conversion")
                     else:
-                        if base == 'USDT' and quote == 'USDC':
-                            # No conversion needed
-                            logger.debug(f"Bybit {base}{quote} orderbook price: {1/mid_price}")
-                            await self._update_price(PriceSource.BYBIT, 1/mid_price)
-                        else:
-                            # No conversion needed
-                            logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
-                            await self._update_price(PriceSource.BYBIT, mid_price)
+                        # No conversion needed
+                        logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
+                        await self._update_price(PriceSource.BYBIT, mid_price)
                         
         except Exception as e:
             logger.error(f"Error processing Bybit data: {e}")
