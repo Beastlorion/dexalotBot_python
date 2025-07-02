@@ -2,7 +2,7 @@ import sys, os, asyncio, time, ast, json, shortuuid, math
 import logging
 from decimal import Decimal
 from eth_utils.units import units, decimal
-import contracts, tools, price_feed_v2 as price_feeds
+import contracts, tools, price_feeds
 from web3 import Web3
 from hexbytes import HexBytes
 from dotenv import load_dotenv, dotenv_values
