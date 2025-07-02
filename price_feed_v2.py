@@ -9,6 +9,7 @@ import asyncio
 import aiohttp
 import json
 import logging
+import settings
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -43,7 +44,7 @@ class PriceFeedConfig:
     price_deviation_threshold: float = 0.05  # 5%
     enable_validation: bool = True
     custom_price_url: Optional[str] = None
-    reconnect_timeout: int = 15  # seconds before reconnecting stale feeds
+    reconnect_timeout: int = 30 # seconds before reconnecting stale feeds
 
 
 class EnhancedPriceFeed:
@@ -60,6 +61,7 @@ class EnhancedPriceFeed:
         self.shutdown = shutdown_manager
         self.validator = safety_validator
         self.circuit_breaker = circuit_breaker
+        self.market_settings = settings.settings.get(self.config.symbol.replace('/', '_'), {})
         
         # Price data storage
         self.prices: Dict[PriceSource, PriceData] = {}
@@ -79,7 +81,8 @@ class EnhancedPriceFeed:
         # Heartbeat monitoring
         self._source_last_update: Dict[PriceSource, float] = {}
         self._heartbeat_task: Optional[asyncio.Task] = None
-        self._reconnect_timeout = config.reconnect_timeout
+        self._reconnect_timeout = self.market_settings.get('timeout', config.reconnect_timeout)
+        self.max_price_age = self.market_settings.get('timeout', config.max_price_age)
         
         logger.info(f"Enhanced price feed initialized for {config.symbol}")
     
@@ -234,10 +237,8 @@ class EnhancedPriceFeed:
             use_orderbook = False
             
             # Check if useBybitOrderbook is configured in settings
-            import settings
-            market_settings = settings.settings.get(self.config.symbol.replace('/', '_'), {})
-            if 'useBybitOrderbook' in market_settings:
-                use_orderbook = market_settings.get('useBybitOrderbook', False)
+            if 'useBybitOrderbook' in self.market_settings:
+                use_orderbook = self.market_settings.get('useBybitOrderbook', False)
             
             if use_orderbook:
                 # Subscribe to orderbook depth for main symbol
@@ -748,7 +749,7 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
         max_price_age=settings.get('timeout', 30),
         enable_validation=True,
         custom_price_url=settings.get('customPriceUrl', 'http://localhost:3000/prices'),
-        reconnect_timeout=settings.get('priceFeedReconnectTimeout', 15)
+        reconnect_timeout=settings.get('priceFeedReconnectTimeout', 30)
     )
     
     # Create components
