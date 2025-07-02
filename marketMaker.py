@@ -157,10 +157,6 @@ class MarketMaker:
         logger.info('Starting order updater')
         
         while not self.shutdown_requested and contracts.status and not self.shutdown_event.is_set():
-            # Log loop conditions periodically
-            if time.time() % 30 < 0.1:  # Log every ~30 seconds
-                logger.debug(f"Order updater loop - shutdown_requested: {self.shutdown_requested}, "
-                           f"contracts.status: {contracts.status}, shutdown_event: {self.shutdown_event.is_set()}")
             try:
                 # Check data freshness
                 if not self._is_data_fresh(timeout):
@@ -555,8 +551,6 @@ class MarketMaker:
             else:
                 raise  # Re-raise to let main.py handle restart
         finally:
-            # Only request shutdown if we're not already shutting down
-            # Remove the automatic shutdown in finally block
             await asyncio.sleep(2)
 
 # Module-level variables for backward compatibility
