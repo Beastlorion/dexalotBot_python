@@ -86,6 +86,27 @@ class EnhancedPriceFeed:
         
         logger.info(f"Enhanced price feed initialized for {config.symbol}")
     
+    def _parse_symbol(self) -> Tuple[str, str]:
+        """
+        Parse symbol into base and quote currencies.
+        Handles both underscore and slash separators.
+        
+        Returns:
+            Tuple of (base, quote) or raises ValueError if invalid format
+        """
+        # Parse base and quote from symbol (handle both _ and / separators)
+        if '_' in self.config.symbol:
+            parts = self.config.symbol.split('_')
+        elif '/' in self.config.symbol:
+            parts = self.config.symbol.split('/')
+        else:
+            raise ValueError(f"Invalid symbol format: {self.config.symbol}")
+        
+        if len(parts) != 2:
+            raise ValueError(f"Invalid symbol format: {self.config.symbol}")
+        
+        return parts[0], parts[1]
+    
     async def start(self):
         """Start all configured price sources"""
         logger.info(f"Starting price feed for {self.config.symbol}")
@@ -166,26 +187,21 @@ class EnhancedPriceFeed:
         try:
             logger.info(f"Starting Bybit feed for {self.config.symbol}")
             
-            # Parse base and quote from symbol (handle both _ and / separators)
-            if '_' in self.config.symbol:
-                parts = self.config.symbol.split('_')
-            elif '/' in self.config.symbol:
-                parts = self.config.symbol.split('/')
-            else:
-                logger.error(f"Invalid symbol format: {self.config.symbol}")
+            # Parse base and quote from symbol
+            try:
+                base, quote = self._parse_symbol()
+            except ValueError as e:
+                logger.error(str(e))
                 return
-            
-            if len(parts) != 2:
-                logger.error(f"Invalid symbol format: {self.config.symbol}")
-                return
-            
-            base, quote = parts
             
             # For Bybit, we need to convert USDC quotes to USDT
             if quote == 'USDC' and base != 'USDT':
                 # We'll get base/USDT price and USDC/USDT price
                 bybit_symbol = f"{base}USDT"
                 need_usdc_conversion = True
+            elif quote == 'USDC' and base == 'USDT':
+                bybit_symbol = f"{quote}{base}"
+                need_usdc_conversion = False
             else:
                 bybit_symbol = f"{base}{quote}"
                 need_usdc_conversion = False
@@ -393,6 +409,12 @@ class EnhancedPriceFeed:
             # Handle orderbook updates (for USDCUSDT conversion or if orderbook mode is enabled)
             elif topic and topic.startswith('orderbook.'):
                 symbol = topic.split('.')[-1]  # e.g., "AVAXUSDT" or "USDCUSDT"
+
+                try:
+                    base, quote = self._parse_symbol()
+                except ValueError as e:
+                    logger.error(str(e))
+                    return
                 
                 # Get orderbook data
                 orderbook_data = data.get('data', {})
@@ -427,9 +449,14 @@ class EnhancedPriceFeed:
                         else:
                             logger.warning("Waiting for USDC/USDT price for conversion")
                     else:
-                        # No conversion needed
-                        logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
-                        await self._update_price(PriceSource.BYBIT, mid_price)
+                        if base == 'USDT' and quote == 'USDC':
+                            # No conversion needed
+                            logger.debug(f"Bybit {base}{quote} orderbook price: {1/mid_price}")
+                            await self._update_price(PriceSource.BYBIT, 1/mid_price)
+                        else:
+                            # No conversion needed
+                            logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
+                            await self._update_price(PriceSource.BYBIT, mid_price)
                         
         except Exception as e:
             logger.error(f"Error processing Bybit data: {e}")
