@@ -383,10 +383,8 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
   orderIDsToCancel = []
   contracts.replaceStatus = 0
   contracts.addStatus = 0
-  isRetrigger = False
-  if contracts.retrigger:
-    isRetrigger = True
   contracts.retrigger = False
+  
   quoteDecimals = pairObj["quote_evmdecimals"]
   shiftPrice = 'ether'
   match quoteDecimals:
@@ -452,7 +450,7 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     skip = False
     for oldOrder in ordersToUpdate:
       if newOrder['side'] == oldOrder['side'] and newOrder['level'] == oldOrder['level']:
-        if newOrder['price'] == oldOrder['price'] or (newOrder['side'] == 0 and newOrder['price'] < oldOrder['price'] and isRetrigger) or (newOrder['side'] == 1 and newOrder['price'] > oldOrder['price'] and isRetrigger): #and newOrder['qty'] == oldOrder['qty']:
+        if newOrder['price'] == oldOrder['price']:
           skip = True
           break
         newOrder['orderID'] = oldOrder['orderID']
