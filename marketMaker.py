@@ -441,28 +441,28 @@ class MarketMaker:
             data_feed_task = asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet))
             
             # Wait a bit for price feed to initialize
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
             
             # Check if price feed is still running and has data
             if price_feed_task.done():
                 try:
-                    await price_feed_task  # This will raise if it failed
-                except Exception as e:
+                    await price_feed_task
+                except Exception as e:   # This will raise if it failed
                     logger.error(f"Price feed failed: {e}")
                     raise
             
             # Wait until we have a valid market price
-            max_wait = 30.0  # Maximum 30 seconds to wait for price
+            timeout = self.market_settings.get('timeout', 30)
             waited = 0.0
-            while waited < max_wait:
-                if price_feeds.marketPrice > 0:
+            while waited < timeout:
+                if price_feeds.marketPrice > 0 and self._is_data_fresh(timeout):
                     logger.info(f"Price feed ready with market price: {price_feeds.marketPrice}")
                     break
                 await asyncio.sleep(0.5)
                 waited += 0.5
             
             if price_feeds.marketPrice <= 0:
-                logger.error(f"Price feed failed to provide market price within {max_wait}s")
+                logger.error(f"Price feed failed to provide market price within {timeout}s : {price_feeds.marketPrice}")
                 raise ValueError("No market price available")
             
             # Now start order updater
