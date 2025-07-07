@@ -50,6 +50,7 @@ class MarketMaker:
         self.last_update_time = 0
         self.data_feed_started = False
         self.data_feed_task = None
+        self.price_feed_started = False
         
         # Failure handling
         self.consecutive_failures = 0
@@ -442,9 +443,13 @@ class MarketMaker:
                 logger.info("Data feed already running, reusing existing task")
                 data_feed_task = self.data_feed_task
 
-            # Start price feed
-            logger.info("Starting price feed...")
-            await price_feeds.startPriceFeed(self.market, self.market_settings)
+            # Start price feed only if not already started
+            if not self.price_feed_started:
+                logger.info("Starting price feed for the first time...")
+                await price_feeds.startPriceFeed(self.market, self.market_settings)
+                self.price_feed_started = True
+            else:
+                logger.info("Price feed already running, skipping initialization")
             
             # Wait a bit for price feed to initialize
             await asyncio.sleep(3.0)
