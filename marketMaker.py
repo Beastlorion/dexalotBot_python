@@ -441,43 +441,22 @@ class MarketMaker:
                 data_feed_task = self.data_feed_task
             else:
                 logger.info("Data feed already running, reusing existing task")
-                data_feed_task = self.data_feed_task
 
             # Start price feed only if not already started
             if not self.price_feed_started:
                 logger.info("Starting price feed for the first time...")
-                await price_feeds.startPriceFeed(self.market, self.market_settings)
+                self.price_feed_task = price_feeds.startPriceFeed(self.market, self.market_settings)
                 self.price_feed_started = True
+                price_feed_task = self.price_feed_task
             else:
                 logger.info("Price feed already running, skipping initialization")
             
-            # Wait a bit for price feed to initialize
-            await asyncio.sleep(3.0)
+            await asyncio.gather(data_feed_task, price_feed_task)
             
             # Now start order updater
             logger.info("Starting order updater...")
             order_updater_task = asyncio.create_task(self.run_order_updater())
-            
-            # Create list of all tasks
-            tasks = [data_feed_task, order_updater_task]
-            
-            # Monitor all tasks but only wait for order updater to complete
-            all_tasks = [data_feed_task, order_updater_task]
-            
-            # Create a monitoring task to log if data feed stops
-            async def monitor_background_tasks():
-                while not order_updater_task.done():
-                    # Check if data feed stopped
-                    if data_feed_task.done():
-                        # Data feed is critical - we should stop
-                        logger.error("Data feed stopped, shutting down order updater")
-                        self.request_shutdown()
-                        return
-                    await asyncio.sleep(1.0)
-            
-            # Start monitoring task
-            monitor_task = asyncio.create_task(monitor_background_tasks())
-            
+
             # Wait for order updater to complete
             try:
                 await order_updater_task
