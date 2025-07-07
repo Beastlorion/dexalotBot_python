@@ -48,6 +48,8 @@ class MarketMaker:
         self.start_time = time.time()
         self.last_update_price = 0
         self.last_update_time = 0
+        self.data_feed_started = False
+        self.data_feed_task = None
         
         # Failure handling
         self.consecutive_failures = 0
@@ -430,9 +432,15 @@ class MarketMaker:
         try:
             await self.initialize()
             
-            # Start data feed
-            logger.info("Starting data feed...")
-            data_feed_task = asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet))
+            # Start data feed only if not already started
+            if not self.data_feed_started:
+                logger.info("Starting data feed for the first time...")
+                self.data_feed_task = asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet))
+                self.data_feed_started = True
+                data_feed_task = self.data_feed_task
+            else:
+                logger.info("Data feed already running, reusing existing task")
+                data_feed_task = self.data_feed_task
 
             # Start price feed
             logger.info("Starting price feed...")

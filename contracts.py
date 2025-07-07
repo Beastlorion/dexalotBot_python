@@ -265,18 +265,24 @@ def getRates(pairObj,pairByte32):
 async def startDataFeeds(pairObj, testnet):
   logger.info(f"[DATA_FEED] Starting data feeds for pair: {pairObj['pair']}")
   try:
+    # Create the websocket handler task but don't wait for it
+    # It will run continuously in the background
     c = asyncio.create_task(handleWebscokets(pairObj, testnet))
     logger.info(f"[DATA_FEED] Created websocket handler task: {c}")
-    results = await asyncio.gather(c, return_exceptions=True)
     
-    # Check if task failed
-    if results[0] is not None:
-      if isinstance(results[0], Exception):
-        logger.error(f"[DATA_FEED] WebSocket handler failed with exception: {results[0]}")
-      else:
-        logger.info(f"[DATA_FEED] WebSocket handler completed with result: {results[0]}")
+    # Give it a moment to start up
+    await asyncio.sleep(1.0)
     
-    logger.info("[DATA_FEED] Data feeds completed")
+    # Check if it failed immediately
+    if c.done():
+      if c.exception():
+        logger.error(f"[DATA_FEED] WebSocket handler failed immediately: {c.exception()}")
+        raise c.exception()
+    
+    logger.info("[DATA_FEED] Data feeds started successfully")
+    # Return without waiting for the task to complete
+    return
+    
   except Exception as e:
     logger.error(f"[DATA_FEED] Failed to start data feeds: {e}", exc_info=True)
     raise
@@ -299,8 +305,14 @@ async def handleWebscokets(pairObj, testnet):
   logger.info(f"[WEBSOCKET] Initial status: {status}")
   
   connection_attempts = 0
+  last_pending_tx_time = 0
+  last_order_status_update_time = time.time()
+  force_reconnect = False
+  
   while status:
+    
     reconnect = False
+    force_reconnect = False
     try:
       if 'wsKey' in config.all_config and len(config.get('wsKey', '')) > 1:
         url = 'https://api.dexalot.com/privapi/auth/getwstoken'
@@ -325,9 +337,25 @@ async def handleWebscokets(pairObj, testnet):
         print("dexalotOrderFeed and dexalotBookFeed START")
         
         message_count = 0
-        while status and not reconnect:
+        while status and not reconnect and not force_reconnect:
           message_count += 1
           try:
+            # Check if we need to force reconnect due to pending tx timeout
+            current_time = time.time()
+            if pendingTransactions:
+              # Find the oldest pending transaction
+              oldest_pending_time = float('inf')
+              for tx in pendingTransactions:
+                if tx.get('timestamp'):
+                  oldest_pending_time = min(oldest_pending_time, tx['timestamp'])
+              
+              # If we have a pending tx and haven't received orderStatusUpdateEvent in 5 seconds
+              if oldest_pending_time < float('inf') and current_time - oldest_pending_time > 5.0:
+                if current_time - last_order_status_update_time > 5.0:
+                  logger.warning(f"[WEBSOCKET] No orderStatusUpdateEvent received for 5 seconds after pending tx, forcing reconnect")
+                  force_reconnect = True
+                  break
+            
             # Add timeout to make recv interruptible
             message = str(await asyncio.wait_for(websocket.recv(), timeout=1.0))
             parsed = json.loads(message)
@@ -363,6 +391,7 @@ async def handleWebscokets(pairObj, testnet):
               
               
             if parsed['type'] == "orderStatusUpdateEvent":
+              last_order_status_update_time = current_time
               data = parsed['data']
               hex1 = HexBytes(data["clientOrderId"][2:])
               a = bytes(hex1).decode('utf-8')
@@ -479,16 +508,27 @@ async def handleWebscokets(pairObj, testnet):
               # status = False
             continue
         
-        logger.info(f"[WEBSOCKET] Exiting inner loop - status={status}, reconnect={reconnect}, messages={message_count}")
-        asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
-        asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        await asyncio.sleep(0.15)
+        logger.info(f"[WEBSOCKET] Exiting inner loop - status={status}, reconnect={reconnect}, force_reconnect={force_reconnect}, messages={message_count}")
+        
+        # Unsubscribe before closing
+        try:
+          await websocket.send(json.dumps(unsubscribeBook))
+          await websocket.send(json.dumps(tradereventunsubscribe))
+          await asyncio.sleep(0.15)
+        except Exception as e:
+          logger.warning(f"[WEBSOCKET] Error during unsubscribe: {e}")
     except Exception as error:
       logger.error(f'[WEBSOCKET] Error during handleWebscokets: {error}', exc_info=True)
       print('error during handleWebscokets:',error)
-      await asyncio.sleep(0.1)
+      await asyncio.sleep(0.15)
   
   logger.info(f"[WEBSOCKET] Exiting handleWebscokets - final status={status}, attempts={connection_attempts}")
+  
+  # Only exit if there's a fatal error or shutdown requested
+  # Otherwise, this should never exit
+  if status:
+    logger.error("[WEBSOCKET] handleWebscokets exited unexpectedly while status is still True")
+    raise Exception("WebSocket handler exited unexpectedly")
       
 async def log_loop(event_filter, poll_interval):
   print("start block filter")
@@ -560,8 +600,9 @@ def handleEvents(event):
   return
     
 def newPendingTx(purpose,orders = []):
-  print('New pending transaction:', purpose, len(orders), time.time())
-  pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders})
+  timestamp = time.time()
+  print('New pending transaction:', purpose, len(orders), timestamp)
+  pendingTransactions.append({'purpose': purpose,'status':'pending','orders':orders, 'timestamp': timestamp})
 
 def getBalances(base, quote, pairObj):
   global refreshBalances, baseShift, quoteShift, status
