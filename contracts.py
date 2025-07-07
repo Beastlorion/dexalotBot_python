@@ -594,8 +594,7 @@ def handleEvents(event):
   except Exception as error:
     logger.error(f"[CONTRACTS] Error in blockfilter handleEvents: {error}", exc_info=True)
     print("error in blockfilter handleEvents:", error)
-    # Don't set status = False here - this is too aggressive for error handling
-    # status = False
+    status = False
     return
   return
     
@@ -635,7 +634,7 @@ def getBalances(base, quote, pairObj):
       ).build_transaction({'nonce':getSubnetNonce(),'gas':500000,'maxFeePerGas':Web3.to_wei(20, 'gwei')})
       incrementNonce()
       contracts["SubNetProvider"]["provider"].eth.send_transaction(contract_data)
-    elif contracts["ALOT"]["portfolioAvail"] < 100:
+    elif alotGas < 15 andcontracts["ALOT"]["portfolioAvail"] < 100:
       logger.critical("[CONTRACTS] OUT OF GAS AND ALOT IN PORTFOLIO - STOPPING BOT")
       print("OUT OF GAS AND ALOT IN PORTFOLIO")
       status = False
