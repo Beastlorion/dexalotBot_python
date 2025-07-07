@@ -464,22 +464,6 @@ class MarketMaker:
             except Exception as e:
                 logger.error(f"Order updater error: {e}")
                 raise
-            finally:
-                # Cancel monitor task
-                monitor_task.cancel()
-            
-            # Cancel all remaining tasks
-            for task in all_tasks:
-                if not task.done():
-                    task.cancel()
-            
-            # Wait for cancellation with timeout
-            pending_tasks = [t for t in all_tasks if not t.done()]
-            if pending_tasks:
-                try:
-                    await asyncio.gather(*pending_tasks, return_exceptions=True)
-                except Exception:
-                    pass
             
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt received in market maker, initiating graceful shutdown")
