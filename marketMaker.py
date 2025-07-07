@@ -255,12 +255,10 @@ class MarketMaker:
     def _is_data_fresh(self, timeout: int) -> bool:
         """Check if price data is fresh enough."""
         time_since_update = time.time() - price_feeds.lastUpdate
-        time_since_eth_update = time.time() - price_feeds.lastUpdateEth
         
         price_fresh = time_since_update < timeout or price_feeds.lastUpdate == 0
-        eth_fresh = time_since_eth_update < timeout or price_feeds.lastUpdateEth == 0 or self.base != "WBTC"
         
-        return price_fresh and eth_fresh
+        return price_fresh
     
     def _get_adjusted_market_price(self) -> float:
         """Get market price with any configured adjustments and validation."""
@@ -432,77 +430,36 @@ class MarketMaker:
         try:
             await self.initialize()
             
-            # Start price feed first
-            logger.info("Starting price feed...")
-            price_feed_task = asyncio.create_task(price_feeds.startPriceFeed(self.market, self.market_settings))
-            
-            # Start data feed concurrently
+            # Start data feed
             logger.info("Starting data feed...")
             data_feed_task = asyncio.create_task(contracts.startDataFeeds(self.pair_obj, self.testnet))
+
+            # Start price feed
+            logger.info("Starting price feed...")
+            await price_feeds.startPriceFeed(self.market, self.market_settings)
             
             # Wait a bit for price feed to initialize
-            await asyncio.sleep(5.0)
-            
-            # Check if price feed is still running and has data
-            if price_feed_task.done():
-                try:
-                    await price_feed_task
-                except Exception as e:   # This will raise if it failed
-                    logger.error(f"Price feed failed: {e}")
-                    raise
-            
-            # Wait until we have a valid market price
-            timeout = self.market_settings.get('timeout', 30)
-            waited = 0.0
-            while waited < timeout:
-                if price_feeds.marketPrice > 0 and self._is_data_fresh(timeout):
-                    logger.info(f"Price feed ready with market price: {price_feeds.marketPrice}")
-                    break
-                await asyncio.sleep(0.5)
-                waited += 0.5
-            
-            if price_feeds.marketPrice <= 0:
-                logger.error(f"Price feed failed to provide market price within {timeout}s : {price_feeds.marketPrice}")
-                raise ValueError("No market price available")
+            await asyncio.sleep(3.0)
             
             # Now start order updater
             logger.info("Starting order updater...")
             order_updater_task = asyncio.create_task(self.run_order_updater())
             
             # Create list of all tasks
-            tasks = [price_feed_task, data_feed_task, order_updater_task]
+            tasks = [data_feed_task, order_updater_task]
             
             # Monitor all tasks but only wait for order updater to complete
-            all_tasks = [price_feed_task, data_feed_task, order_updater_task]
+            all_tasks = [data_feed_task, order_updater_task]
             
-            # Create a monitoring task to log if price feed or data feed stops
+            # Create a monitoring task to log if data feed stops
             async def monitor_background_tasks():
                 while not order_updater_task.done():
-                    # Check if price feed stopped
-                    if price_feed_task.done():
-                        try:
-                            await price_feed_task  # This will raise if it has completed normally
-                            logger.warning("Price feed task completed normally")
-                        except Exception as e:
-                            logger.error(f"Price feed task failed: {e}")
-                            # Price feed is critical - we should stop if it fails to start
-                            logger.error("Price feed stopped, shutting down order updater")
-                            self.request_shutdown()
-                        return
-                    
-                    # Check if data feed stopped (this is more critical)
+                    # Check if data feed stopped
                     if data_feed_task.done():
-                        try:
-                            await data_feed_task  # This will raise if it failed
-                            logger.warning("Data feed task completed normally")
-                        except Exception as e:
-                            logger.error(f"Data feed task failed: {e}")
-                        
                         # Data feed is critical - we should stop
                         logger.error("Data feed stopped, shutting down order updater")
                         self.request_shutdown()
                         return
-                    
                     await asyncio.sleep(1.0)
             
             # Start monitoring task
@@ -518,11 +475,6 @@ class MarketMaker:
             finally:
                 # Cancel monitor task
                 monitor_task.cancel()
-                try:
-                    await monitor_task
-                except asyncio.CancelledError:
-                    pass
-                    order_updater_task.cancel()
             
             # Cancel all remaining tasks
             for task in all_tasks:

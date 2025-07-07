@@ -482,7 +482,7 @@ async def handleWebscokets(pairObj, testnet):
         logger.info(f"[WEBSOCKET] Exiting inner loop - status={status}, reconnect={reconnect}, messages={message_count}")
         asyncio.create_task(websocket.send(json.dumps(unsubscribeBook)))
         asyncio.create_task(websocket.send(json.dumps(tradereventunsubscribe)))
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.15)
     except Exception as error:
       logger.error(f'[WEBSOCKET] Error during handleWebscokets: {error}', exc_info=True)
       print('error during handleWebscokets:',error)
