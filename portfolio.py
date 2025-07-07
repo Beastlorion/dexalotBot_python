@@ -72,6 +72,7 @@ def getBalances(base, quote):
       # print("BALANCES:",quote,contracts.contracts[quote]["mainnetBal"], contracts.contracts[quote]["portfolioTot"], contracts.contracts[quote]["portfolioAvail"])
   except Exception as error:
     print("error in getBalances:", error)
+    contracts.refreshBalances = True
   print("finished getting balances:",time.time())
   return
   
