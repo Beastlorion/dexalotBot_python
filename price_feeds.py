@@ -780,10 +780,8 @@ _global_shutdown: Optional[ShutdownManager] = None
 
 # Module-level variables for backward compatibility with old price_feeds.py
 marketPrice = 0.0
-ethUsdtPrice = 0.0
 volSpread = 0.0
 lastUpdate = 0
-lastUpdateEth = 0
 
 
 async def startPriceFeed(market: str, settings: Dict[str, Any]):
@@ -865,7 +863,7 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
 
 async def _update_globals_loop():
     """Update global variables for backward compatibility"""
-    global marketPrice, lastUpdate, volSpread, ethUsdtPrice, lastUpdateEth
+    global marketPrice, lastUpdate, volSpread
     
     while _global_price_feed and contracts.status:
         try:
@@ -873,11 +871,6 @@ async def _update_globals_loop():
             if is_fresh and price > 0:
                 marketPrice = price
                 lastUpdate = time.time()
-                
-                # For ETH pairs, update ETH price tracking
-                if 'ETH' in _global_price_feed.config.symbol:
-                    ethUsdtPrice = price
-                    lastUpdateEth = time.time()
             
             # Get volatility spread if available
             status = _global_price_feed.get_status()
