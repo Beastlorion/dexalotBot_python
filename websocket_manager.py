@@ -23,9 +23,9 @@ class WebSocketConnection:
         url: str,
         shutdown_manager: ShutdownManager,
         name: str = "",
-        recv_timeout: float = 1.0,
+        recv_timeout: float = 2.0,
         reconnect_delay: float = 5.0,
-        max_reconnect_attempts: int = 5
+        max_reconnect_attempts: int = 10
     ):
         self.url = url
         self.shutdown = shutdown_manager
@@ -161,7 +161,7 @@ class WebSocketConnection:
                     continue
                 else:
                     # Connection successful, give it a moment to stabilize
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(.5)
             
             # Handle messages
             await self.handle_messages()
@@ -216,9 +216,9 @@ class WebSocketManager:
         self,
         name: str,
         url: str,
-        recv_timeout: float = 1.0,
-        reconnect_delay: float = 10.0,
-        max_reconnect_attempts: int = 5
+        recv_timeout: float = 2.0,
+        reconnect_delay: float = 5.0,
+        max_reconnect_attempts: int = 10
     ) -> WebSocketConnection:
         """Add a WebSocket connection"""
         connection = WebSocketConnection(

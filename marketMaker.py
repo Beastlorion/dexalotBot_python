@@ -185,6 +185,7 @@ class MarketMaker:
                         logger.info("Market data is fresh again, resuming normal operations")
                         stale_price_handled = False
                         reset_orders = True  # Force order refresh after stale period
+                        contracts.refreshBalances = True
                 
                 market_price = self._get_adjusted_market_price()
                 
@@ -225,6 +226,8 @@ class MarketMaker:
                         logger.warning(f"Order update failed, handling failure...")
                         reset_orders = await self._handle_failed_update(last_priority_gwei, priority_gwei)
                         last_priority_gwei = priority_gwei
+                        if not reset_orders:
+                            break
                 
                 # Small delay between iterations
                 await asyncio.sleep(0.01)
@@ -404,8 +407,8 @@ class MarketMaker:
         logger.warning(f"Order update failed (attempt {self.consecutive_failures}/{self.max_consecutive_failures})")
         
         if self.consecutive_failures >= self.max_consecutive_failures:
-            logger.error("Maximum consecutive failures reached, shutting down")
-            self.request_shutdown()
+            # logger.error("Maximum consecutive failures reached, shutting down")
+            # self.request_shutdown()
             return False
         
         if self.consecutive_failures >= 1:
@@ -420,9 +423,9 @@ class MarketMaker:
                 return True  # reset_orders = True
             except Exception as e:
                 logger.error(f"Failed to reinitialize: {e}")
-                self.consecutive_failures += 1
-                if self.consecutive_failures >= self.max_consecutive_failures:
-                    self.request_shutdown()
+                # self.consecutive_failures += 1
+                # if self.consecutive_failures >= self.max_consecutive_failures:
+                #     self.request_shutdown()
                 return False
         
         logger.info("Failed update handled\n")

@@ -505,7 +505,6 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     return False
   else:
     logger.debug(f"[ORDERS] No order operations needed")
-    await asyncio.sleep(1)
   logger.info(f"[ORDERS] cancelReplaceOrders completed - total active orders: {len(contracts.activeOrders)}")
   return True
 
