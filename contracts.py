@@ -288,7 +288,7 @@ async def startDataFeeds(pairObj, testnet):
     raise
     
 async def handleWebscokets(pairObj, testnet):
-  global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel
+  global status, reconnect, bestAsk, bestBid, bids, asks, addStatus, replaceStatus, refreshBalances, retrigger, orderIDsToCancel, takerFilled, makerFilled, refreshOrderLevel, refreshActiveOrders
   
   logger.info(f"[WEBSOCKET] Starting WebSocket handler for {pairObj['pair']}")
   base = pairObj['pair'].split('/')[0]
@@ -354,6 +354,8 @@ async def handleWebscokets(pairObj, testnet):
                 if current_time - last_order_status_update_time > 5.0:
                   logger.warning(f"[WEBSOCKET] No orderStatusUpdateEvent received for 5 seconds after pending tx, forcing reconnect")
                   force_reconnect = True
+                  refreshActiveOrders = True
+                  pendingTransactions.remove(tx)
                   break
             
             # Add timeout to make recv interruptible
