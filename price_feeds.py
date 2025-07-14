@@ -212,6 +212,10 @@ class EnhancedPriceFeed:
             # Check if this is a perpetual contract
             is_perps = self.market_settings.get('perps', False)
             
+            # Initialize funding rate data storage
+            self._funding_rate = 0.0
+            self._next_funding_time = 0
+            
             # Set up WebSocket connection
             # Use linear endpoint for perps, spot endpoint for spot
             ws_url = "wss://stream.bybit.com/v5/public/linear" if is_perps else "wss://stream.bybit.com/v5/public/spot"
@@ -375,19 +379,31 @@ class EnhancedPriceFeed:
                 if trade_price <= 0:
                     return
                 
+                # Apply funding adjustment for perpetuals
+                if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                    adjusted_price = self._calculate_funding_adjusted_price(trade_price)
+                else:
+                    adjusted_price = trade_price
+                
                 # Handle USDC conversion if needed
                 if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
                     # Convert from USDT to USDC
                     if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
-                        converted_price = trade_price / self._usdc_usdt_price
-                        logger.debug(f"Bybit {symbol} trade price: {trade_price} USDT = {converted_price} USDC")
+                        converted_price = adjusted_price / self._usdc_usdt_price
+                        if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                            logger.debug(f"Bybit {symbol} perps trade price: {trade_price} -> funding adjusted: {adjusted_price} USDT = {converted_price} USDC")
+                        else:
+                            logger.debug(f"Bybit {symbol} trade price: {adjusted_price} USDT = {converted_price} USDC")
                         await self._update_price(PriceSource.BYBIT, converted_price)
                     else:
                         logger.warning("Waiting for USDC/USDT price for conversion")
                 else:
                     # No conversion needed
-                    logger.debug(f"Bybit {symbol} trade price: {trade_price}")
-                    await self._update_price(PriceSource.BYBIT, trade_price)
+                    if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                        logger.debug(f"Bybit {symbol} perps trade price: {trade_price} -> funding adjusted: {adjusted_price}")
+                    else:
+                        logger.debug(f"Bybit {symbol} trade price: {adjusted_price}")
+                    await self._update_price(PriceSource.BYBIT, adjusted_price)
                         
             # Handle tickers updates
             elif topic and topic.startswith('tickers.'):
@@ -403,19 +419,47 @@ class EnhancedPriceFeed:
                 if lastPrice <= 0:
                     return
                 
-                # Handle USDC conversion if needed
-                if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
-                    # Convert from USDT to USDC
-                    if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
-                        converted_price = lastPrice / self._usdc_usdt_price
-                        logger.debug(f"Bybit {symbol} tickers price: {lastPrice} USDT = {converted_price} USDC")
-                        await self._update_price(PriceSource.BYBIT, converted_price)
+                # Extract funding rate for perpetuals
+                if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                    funding_rate = float(ticker_data.get('fundingRate', 0))
+                    next_funding_time = int(ticker_data.get('nextFundingTime', 0))
+                    
+                    if funding_rate != 0 and next_funding_time > 0:
+                        self._funding_rate = funding_rate
+                        self._next_funding_time = next_funding_time / 1000  # Convert ms to seconds
+                        logger.debug(f"Bybit {symbol} funding rate: {funding_rate}, next funding: {self._next_funding_time}")
+                    
+                    # Calculate funding-adjusted price
+                    adjusted_price = self._calculate_funding_adjusted_price(lastPrice)
+                    
+                    # Handle USDC conversion if needed
+                    if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
+                        # Convert from USDT to USDC
+                        if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
+                            converted_price = adjusted_price / self._usdc_usdt_price
+                            logger.debug(f"Bybit {symbol} perps price: {lastPrice} -> funding adjusted: {adjusted_price} USDT = {converted_price} USDC")
+                            await self._update_price(PriceSource.BYBIT, converted_price)
+                        else:
+                            logger.warning("Waiting for USDC/USDT price for conversion")
                     else:
-                        logger.warning("Waiting for USDC/USDT price for conversion")
+                        # No conversion needed
+                        logger.debug(f"Bybit {symbol} perps price: {lastPrice} -> funding adjusted: {adjusted_price}")
+                        await self._update_price(PriceSource.BYBIT, adjusted_price)
                 else:
-                    # No conversion needed, use lastPrice
-                    logger.debug(f"Bybit {symbol} tickers price: {lastPrice}")
-                    await self._update_price(PriceSource.BYBIT, lastPrice)
+                    # Not perps, use regular price
+                    # Handle USDC conversion if needed
+                    if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
+                        # Convert from USDT to USDC
+                        if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
+                            converted_price = lastPrice / self._usdc_usdt_price
+                            logger.debug(f"Bybit {symbol} tickers price: {lastPrice} USDT = {converted_price} USDC")
+                            await self._update_price(PriceSource.BYBIT, converted_price)
+                        else:
+                            logger.warning("Waiting for USDC/USDT price for conversion")
+                    else:
+                        # No conversion needed, use lastPrice
+                        logger.debug(f"Bybit {symbol} tickers price: {lastPrice}")
+                        await self._update_price(PriceSource.BYBIT, lastPrice)
             
             # Handle orderbook updates (for USDCUSDT conversion or if orderbook mode is enabled)
             elif topic and topic.startswith('orderbook.'):
@@ -456,18 +500,30 @@ class EnhancedPriceFeed:
                         logger.debug(f"Bybit USDC/USDT price: {mid_price}")
                 else:
                     # This is our main symbol price (only if using orderbook mode)
+                    # Apply funding adjustment for perpetuals
+                    if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                        adjusted_price = self._calculate_funding_adjusted_price(mid_price)
+                    else:
+                        adjusted_price = mid_price
+                    
                     if hasattr(self, '_bybit_needs_usdc_conversion') and self._bybit_needs_usdc_conversion:
                         # Convert from USDT to USDC
                         if hasattr(self, '_usdc_usdt_price') and self._usdc_usdt_price:
-                            converted_price = mid_price / self._usdc_usdt_price
-                            logger.debug(f"Bybit {symbol} orderbook price: {mid_price} USDT = {converted_price} USDC")
+                            converted_price = adjusted_price / self._usdc_usdt_price
+                            if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                                logger.debug(f"Bybit {symbol} perps orderbook price: {mid_price} -> funding adjusted: {adjusted_price} USDT = {converted_price} USDC")
+                            else:
+                                logger.debug(f"Bybit {symbol} orderbook price: {adjusted_price} USDT = {converted_price} USDC")
                             await self._update_price(PriceSource.BYBIT, converted_price)
                         else:
                             logger.warning("Waiting for USDC/USDT price for conversion")
                     else:
                         # No conversion needed
-                        logger.debug(f"Bybit {symbol} orderbook price: {mid_price}")
-                        await self._update_price(PriceSource.BYBIT, mid_price)
+                        if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+                            logger.debug(f"Bybit {symbol} perps orderbook price: {mid_price} -> funding adjusted: {adjusted_price}")
+                        else:
+                            logger.debug(f"Bybit {symbol} orderbook price: {adjusted_price}")
+                        await self._update_price(PriceSource.BYBIT, adjusted_price)
                         
         except Exception as e:
             logger.error(f"Error processing Bybit data: {e}")
@@ -558,6 +614,39 @@ class EnhancedPriceFeed:
             logger.error(f"Error updating price from {source.value}: {e}")
             self._record_source_failure(source)
     
+    def _calculate_funding_adjusted_price(self, perps_price: float) -> float:
+        """
+        Calculate funding-adjusted price for perpetual contracts.
+        
+        The funding premium is calculated as:
+        funding_premium = funding_rate * time_to_funding / funding_interval
+        
+        We subtract the funding premium from the perps price to get the adjusted price.
+        """
+        if self._funding_rate == 0 or self._next_funding_time == 0:
+            return perps_price
+        
+        current_time = time.time()
+        time_to_funding = max(0, self._next_funding_time - current_time)
+        
+        # Funding happens every 8 hours (28800 seconds)
+        funding_interval = 8 * 60 * 60  # 8 hours in seconds
+        
+        # Calculate the funding premium
+        # The funding rate is for 8 hours, so we need to prorate it based on time remaining
+        funding_premium = self._funding_rate * (time_to_funding / funding_interval)
+        
+        # Subtract funding premium from perps price
+        # If funding rate is positive, longs pay shorts, so we subtract from perps price
+        # If funding rate is negative, shorts pay longs, so we add to perps price (subtracting negative)
+        adjusted_price = perps_price * (1 - funding_premium)
+        
+        logger.debug(f"Funding adjustment: perps={perps_price:.4f}, rate={self._funding_rate:.6f}, "
+                    f"time_to_funding={time_to_funding:.0f}s, premium={funding_premium:.6f}, "
+                    f"adjusted={adjusted_price:.4f}")
+        
+        return adjusted_price
+    
     def _is_better_source(self, new_source: PriceSource, current_source: PriceSource) -> bool:
         """Determine if new source is better than current source"""
         # Prefer primary source
@@ -606,7 +695,7 @@ class EnhancedPriceFeed:
         """Get price feed status"""
         price, is_fresh = self.get_current_price()
         
-        return {
+        status = {
             "symbol": self.config.symbol,
             "current_price": price,
             "is_fresh": is_fresh,
@@ -617,6 +706,17 @@ class EnhancedPriceFeed:
             "source_failures": dict(self.source_failures),
             "available_sources": list(self.prices.keys())
         }
+        
+        # Add funding rate info if this is a perps feed
+        if hasattr(self, '_bybit_subscription_data') and self._bybit_subscription_data.get('is_perps', False):
+            status["funding_rate"] = self._funding_rate
+            status["next_funding_time"] = self._next_funding_time
+            if self._next_funding_time > 0:
+                time_to_funding = max(0, self._next_funding_time - time.time())
+                status["time_to_funding_seconds"] = time_to_funding
+                status["funding_premium"] = self._funding_rate * (time_to_funding / (8 * 60 * 60))
+        
+        return status
     
     async def _monitor_heartbeat(self):
         """Monitor price feed heartbeat and reconnect if stale"""
