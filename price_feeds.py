@@ -22,6 +22,7 @@ from shutdown_manager import ShutdownManager
 from websocket_manager import WebSocketManager, WebSocketConnection
 import tools
 import contracts
+from odos_api import OdosAPI
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class EnhancedPriceFeed:
         # Components
         self.websocket_manager = WebSocketManager(shutdown_manager)
         self.binance_client: Optional[AsyncClient] = None
+        self.odos_api: Optional[OdosAPI] = None
         
         # Heartbeat monitoring
         self._source_last_update: Dict[PriceSource, float] = {}
@@ -309,32 +311,60 @@ class EnhancedPriceFeed:
             self._record_source_failure(PriceSource.BYBIT)
     
     async def _start_custom_feed(self):
-        """Start custom price feed"""
-        if not self.config.custom_price_url:
-            logger.error("Custom price URL not configured")
+        """Start custom price feed - uses Odos API when useCustomPrice is True"""
+        # Check if we should use Odos API
+        use_odos = self.market_settings.get('useCustomPrice', False)
+        
+        if use_odos:
+            logger.info(f"Starting Odos price feed for {self.config.symbol}")
+            # Initialize Odos API
+            if not self.odos_api:
+                self.odos_api = OdosAPI(chain_id=43114)  # Avalanche C-Chain
+                await self.odos_api.start()
+            
+            async def poll_odos_price():
+                while not self.shutdown.is_shutdown_requested():
+                    try:
+                        await self._fetch_odos_price()
+                    except Exception as e:
+                        logger.error(f"Odos price feed error: {e}")
+                        self._record_source_failure(PriceSource.CUSTOM)
+                    
+                    # Wait before next poll (shorter interval for Odos)
+                    if await self.shutdown.wait_with_timeout(5.0):
+                        break
+            
+            task = asyncio.create_task(poll_odos_price())
+            self.shutdown.register_task(task, f"odos-{self.config.symbol}")
+            
+        elif self.config.custom_price_url:
+            # Fall back to original custom price URL behavior
+            logger.info(f"Starting custom URL price feed for {self.config.symbol}")
+            
+            async def poll_custom_price():
+                while not self.shutdown.is_shutdown_requested():
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(self.config.custom_price_url) as response:
+                                if response.status == 200:
+                                    data = await response.json()
+                                    await self._process_custom_data(data)
+                                else:
+                                    logger.error(f"Custom price feed HTTP {response.status}")
+                                    self._record_source_failure(PriceSource.CUSTOM)
+                    except Exception as e:
+                        logger.error(f"Custom price feed error: {e}")
+                        self._record_source_failure(PriceSource.CUSTOM)
+                    
+                    # Wait before next poll
+                    if await self.shutdown.wait_with_timeout(10.0):
+                        break
+            
+            task = asyncio.create_task(poll_custom_price())
+            self.shutdown.register_task(task, f"custom-{self.config.symbol}")
+        else:
+            logger.error("Neither Odos nor custom price URL configured")
             return
-        
-        async def poll_custom_price():
-            while not self.shutdown.is_shutdown_requested():
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(self.config.custom_price_url) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                await self._process_custom_data(data)
-                            else:
-                                logger.error(f"Custom price feed HTTP {response.status}")
-                                self._record_source_failure(PriceSource.CUSTOM)
-                except Exception as e:
-                    logger.error(f"Custom price feed error: {e}")
-                    self._record_source_failure(PriceSource.CUSTOM)
-                
-                # Wait before next poll
-                if await self.shutdown.wait_with_timeout(10.0):
-                    break
-        
-        task = asyncio.create_task(poll_custom_price())
-        self.shutdown.register_task(task, f"custom-{self.config.symbol}")
     
     async def _start_dexalot_feed(self):
         """Start Dexalot native price feed"""
@@ -542,6 +572,67 @@ class EnhancedPriceFeed:
                     self._source_last_update[PriceSource.CUSTOM] = time.time()
         except Exception as e:
             logger.error(f"Error processing custom data: {e}")
+            self._record_source_failure(PriceSource.CUSTOM)
+    
+    async def _fetch_odos_price(self):
+        """Fetch price from Odos API using buy/sell quotes"""
+        try:
+            # Parse base and quote from symbol
+            base, quote = self._parse_symbol()
+            
+            # Get token details from contracts
+            if base not in contracts.contracts or quote not in contracts.contracts:
+                logger.error(f"Token details not found for {base} or {quote}")
+                return
+            
+            base_token = contracts.contracts[base]
+            quote_token = contracts.contracts[quote]
+            
+            # Get token addresses and decimals
+            base_address = base_token.get('tokenDetails', {}).get('address')
+            quote_address = quote_token.get('tokenDetails', {}).get('address')
+            base_decimals = base_token.get('tokenDetails', {}).get('evmdecimals', 18)
+            quote_decimals = quote_token.get('tokenDetails', {}).get('evmdecimals', 18)
+            
+            if not base_address or not quote_address:
+                logger.error(f"Token addresses not found for {base} or {quote}")
+                return
+            
+            # Get a fallback base price (e.g., from Binance/Bybit if available)
+            base_price_usd = 1.0  # Default for stablecoins
+            if PriceSource.BINANCE in self.prices:
+                base_price_usd = self.prices[PriceSource.BINANCE].price
+            elif PriceSource.BYBIT in self.prices:
+                base_price_usd = self.prices[PriceSource.BYBIT].price
+            
+            # Special handling for USDC/USDT pairs
+            if base in ['USDC', 'USDT'] and quote in ['USDC', 'USDT']:
+                base_price_usd = 1.0
+            
+            # Get user address from market settings or use a default
+            user_address = self.market_settings.get('address', contracts.address or "0x0000000000000000000000000000000000000000")
+            
+            # Fetch price from Odos
+            price = await self.odos_api.get_price_from_quotes(
+                base_token_address=base_address,
+                quote_token_address=quote_address,
+                base_decimals=base_decimals,
+                quote_decimals=quote_decimals,
+                amount_usd=100.0,  # Use $100 worth for quotes
+                user_address=user_address,
+                base_price_usd=base_price_usd
+            )
+            
+            if price and price > 0:
+                logger.info(f"Odos price for {self.config.symbol}: {price:.4f}")
+                await self._update_price(PriceSource.CUSTOM, price)
+            else:
+                logger.warning(f"Failed to get Odos price for {self.config.symbol}")
+                # Still update heartbeat to prevent reconnection attempts
+                self._source_last_update[PriceSource.CUSTOM] = time.time()
+                
+        except Exception as e:
+            logger.error(f"Error fetching Odos price: {e}")
             self._record_source_failure(PriceSource.CUSTOM)
     
     async def _update_price(self, source: PriceSource, price: float):
@@ -810,6 +901,10 @@ class EnhancedPriceFeed:
         # Close Binance client
         if self.binance_client:
             await self.binance_client.close_connection()
+        
+        # Close Odos API session
+        if self.odos_api:
+            await self.odos_api.stop()
         
         logger.info(f"Price feed stopped for {self.config.symbol}")
 
