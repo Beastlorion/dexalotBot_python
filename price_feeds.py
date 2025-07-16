@@ -1018,8 +1018,8 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
     from safety import PriceBounds, PriceSafetyValidator, CircuitBreaker
     
     bounds = None
-    if 'SAFETY_BOUNDS' in settings and market in settings['SAFETY_BOUNDS']:
-        safety_config = settings['SAFETY_BOUNDS'][market]
+    if 'SAFETY_BOUNDS' in settings:
+        safety_config = settings['SAFETY_BOUNDS']
         bounds = PriceBounds(
             min_price=safety_config.get('min_price', 0.01),
             max_price=safety_config.get('max_price', 100000),
