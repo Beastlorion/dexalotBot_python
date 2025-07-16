@@ -62,64 +62,71 @@ class DexalotAnalytics:
     
     async def fetch_filled_orders(self) -> List[Dict]:
         """Fetch filled orders from Dexalot API with pagination"""
-        logger.info(f"Fetching filled orders for {self.config.pair_str} from {self.config.start_time} to {self.config.end_time}")
+        # Convert Unix timestamps to ISO format
+        from_date = datetime.fromtimestamp(self.config.start_time, tz=timezone.utc).isoformat().replace('+00:00', '.000Z')
+        to_date = datetime.fromtimestamp(self.config.end_time, tz=timezone.utc).isoformat().replace('+00:00', '.000Z')
+        
+        logger.info(f"Fetching filled orders for {self.config.pair_str} from {from_date} to {to_date}")
         
         all_orders = []
-        page = 0
+        page_no = 1
+        items_per_page = 1000  # Max items per page
         has_more = True
         
         while has_more:
             try:
-                # Construct URL with pagination
-                # Assuming the API supports category=1 for filled orders and pagination
-                url = f"{self.signed_api_url}orders?pair={self.config.pair_str}&category=1&page={page}&limit=20"
+                # Construct URL with proper parameters
+                url = f"{self.signed_api_url}orders"
+                params = {
+                    'periodfrom': from_date,
+                    'periodto': to_date,
+                    'itemsperpage': items_per_page,
+                    'pageno': page_no,
+                    'pair': self.config.pair_str,
+                    'category': 0  # 0 for all orders, will filter filled ones later
+                }
                 
-                # Add time range filters if supported by API
-                url += f"&startTime={self.config.start_time}&endTime={self.config.end_time}"
+                logger.debug(f"Fetching page {page_no}: {url} with params {params}")
                 
-                logger.debug(f"Fetching page {page}: {url}")
-                
-                async with self.session.get(url) as response:
+                async with self.session.get(url, params=params) as response:
                     if response.status != 200:
-                        logger.error(f"Failed to fetch orders: HTTP {response.status}")
+                        text = await response.text()
+                        logger.error(f"Failed to fetch orders: HTTP {response.status} - {text}")
                         break
                     
                     data = await response.json()
                     
-                    # Handle response based on API structure
-                    # Assuming response is a list of orders or has an 'orders' field
-                    if isinstance(data, list):
-                        orders = data
-                    elif isinstance(data, dict) and 'orders' in data:
-                        orders = data['orders']
-                    else:
+                    # Handle response format: {"count": N, "rows": [...]}
+                    if not isinstance(data, dict) or 'rows' not in data:
                         logger.error(f"Unexpected response format: {data}")
                         break
                     
-                    # Check if we got any orders
-                    if not orders:
-                        has_more = False
-                        break
+                    orders = data['rows']
+                    total_count = data.get('count', 0)
                     
-                    # Filter orders by timestamp if API doesn't support time filters
-                    filtered_orders = [
+                    # Filter for filled orders (status 2 = FILLED, 4 = CANCELED)
+                    # Also check quantityfilled > 0 for partially filled orders
+                    filled_orders = [
                         order for order in orders
-                        if self.config.start_time <= int(order.get('ts', 0)) <= self.config.end_time
+                        if float(order.get('quantityfilled', '0')) > 0
                     ]
                     
-                    all_orders.extend(filtered_orders)
+                    all_orders.extend(filled_orders)
+                    
+                    logger.info(f"Page {page_no}: fetched {len(orders)} orders, {len(filled_orders)} with fills")
                     
                     # Check if we should continue pagination
-                    if len(orders) < 20:  # Less than page size means no more pages
+                    current_total = page_no * items_per_page
+                    if current_total >= total_count or len(orders) < items_per_page:
                         has_more = False
                     else:
-                        page += 1
+                        page_no += 1
                         
                     # Add a small delay to avoid rate limiting
                     await asyncio.sleep(0.1)
                     
             except Exception as e:
-                logger.error(f"Error fetching orders page {page}: {e}")
+                logger.error(f"Error fetching orders page {page_no}: {e}")
                 break
         
         logger.info(f"Fetched {len(all_orders)} filled orders")
@@ -147,14 +154,31 @@ class DexalotAnalytics:
         }
         
         for order in orders:
-            # Skip if order is outside our time range
-            if order.get('ts', 0) < self.config.start_time or order.get('ts', 0) > self.config.end_time:
+            # Skip if no fills
+            if qty_filled == 0:
                 continue
             
-            qty_filled = float(order.get('quantityfilled', 0))
-            total_amount = float(order.get('totalamount', 0))
-            price = float(order.get('price', 0))
+            # Parse timestamp if needed (already filtered by API)
+            # ts format: "2023-02-22T18:29:02.000Z"
+            ts_str = order.get('ts', '')
+            if ts_str:
+                try:
+                    ts_dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    order_timestamp = ts_dt.timestamp()
+                    # Double-check time range
+                    if order_timestamp < self.config.start_time or order_timestamp > self.config.end_time:
+                        continue
+                except:
+                    pass
+            
+            qty_filled = float(order.get('quantityfilled', '0'))
+            total_amount = float(order.get('totalamount', '0'))
+            price = float(order.get('price', '0'))
             side = int(order.get('side', -1))
+            
+            # If totalamount is 0, calculate it from price and quantity
+            if total_amount == 0 and price > 0 and qty_filled > 0:
+                total_amount = price * qty_filled
             
             if side == 0:  # Buy order
                 data['buyFills'] += 1
@@ -165,7 +189,7 @@ class DexalotAnalytics:
                 data['totalSold'] += total_amount
                 data['totalQtySold'] += qty_filled
             
-            data['totalFees'] += float(order.get('totalfee', 0))
+            data['totalFees'] += float(order.get('totalfee', '0'))
             data['totalVolumeBase'] += qty_filled
             data['totalVolumeQuote'] += total_amount
         
@@ -204,9 +228,22 @@ class DexalotAnalytics:
         print(f"  Quote Volume: {analytics['totalVolumeQuote']:.2f} {self.config.quote}")
         print(f"  Volume/Hour:  {analytics.get('volume_per_hour', 0):.2f} {self.config.quote}")
         print("\nPRICES:")
-        print(f"  Avg Buy Price:  {analytics['avgBuyPrice']:.4f}")
-        print(f"  Avg Sell Price: {analytics['avgSellPrice']:.4f}")
-        print(f"  Spread:         {(analytics['avgSellPrice'] - analytics['avgBuyPrice']):.4f} ({((analytics['avgSellPrice'] - analytics['avgBuyPrice']) / analytics['avgBuyPrice'] * 100):.2f}%)")
+        if analytics['avgBuyPrice'] > 0:
+            print(f"  Avg Buy Price:  {analytics['avgBuyPrice']:.4f}")
+        else:
+            print(f"  Avg Buy Price:  N/A (no buy fills)")
+            
+        if analytics['avgSellPrice'] > 0:
+            print(f"  Avg Sell Price: {analytics['avgSellPrice']:.4f}")
+        else:
+            print(f"  Avg Sell Price: N/A (no sell fills)")
+            
+        if analytics['avgBuyPrice'] > 0 and analytics['avgSellPrice'] > 0:
+            spread = analytics['avgSellPrice'] - analytics['avgBuyPrice']
+            spread_pct = (spread / analytics['avgBuyPrice']) * 100
+            print(f"  Spread:         {spread:.4f} ({spread_pct:.2f}%)")
+        else:
+            print(f"  Spread:         N/A")
         print("\nPOSITION:")
         print(f"  Quantity Bought:      {analytics['totalQtyBought']:.4f} {self.config.base}")
         print(f"  Quantity Sold:        {analytics['totalQtySold']:.4f} {self.config.base}")
