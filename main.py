@@ -219,11 +219,13 @@ class EnhancedBotManager:
     
     async def run(self):
         """Enhanced main run method with comprehensive error handling"""
-        # Install signal handlers
-        self.shutdown.install_signal_handlers()
+        # Check for analytics mode early
+        is_analytics_mode = len(sys.argv) > 2 and 'analytics' in sys.argv
         
-        # Register cleanup callback
-        self.shutdown.register_cleanup(self.graceful_shutdown, "bot cleanup")
+        # Only install signal handlers and register cleanup for market maker mode
+        if not is_analytics_mode:
+            self.shutdown.install_signal_handlers()
+            self.shutdown.register_cleanup(self.graceful_shutdown, "bot cleanup")
         
         try:
             # Parse command line arguments
@@ -238,7 +240,7 @@ class EnhancedBotManager:
             logger.info(f"Market pair: {self.market_pair}")
             
             # Check for analytics mode
-            if len(sys.argv) > 2 and 'analytics' in sys.argv:
+            if is_analytics_mode:
                 await self.run_analytics()
                 return
             
@@ -257,6 +259,11 @@ class EnhancedBotManager:
             self.shutdown.request_shutdown(ShutdownReason.ERROR_LIMIT)
             raise
         finally:
+            # Skip cleanup for analytics mode
+            if is_analytics_mode:
+                logger.info("Analytics mode completed, skipping market maker cleanup")
+                return
+            
             # Ensure cleanup runs
             if not self.shutdown.is_shutdown_requested():
                 self.shutdown.request_shutdown(ShutdownReason.MANUAL)
