@@ -70,7 +70,7 @@ class DexalotAnalytics:
         
         all_orders = []
         page_no = 1
-        items_per_page = 1000  # Max items per page
+        items_per_page = 20  # Max items per page
         has_more = True
         
         while has_more:
