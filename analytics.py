@@ -19,149 +19,334 @@ import asyncio
 from pprint import pprint
 import aiohttp
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 from config import config
+import time
+from dataclasses import dataclass
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-# Get market information from command line arguments
-market = sys.argv[1] if len(sys.argv) > 1 else None
-base = tools.getSymbolFromName(market, 0) if market else None
-quote = tools.getSymbolFromName(market, 1) if market else None
-pairStr = base + '/' + quote if base and quote else None
-settings_config = settings.settings[market] if market else None
+
+@dataclass
+class AnalyticsConfig:
+    """Configuration for analytics run"""
+    market: str
+    start_time: int
+    end_time: int
+    base: str
+    quote: str
+    pair_str: str
+    settings_config: Dict[str, Any]
+
+
+class DexalotAnalytics:
+    """Main analytics class for fetching and processing trade data"""
+    
+    def __init__(self, analytics_config: AnalyticsConfig):
+        self.config = analytics_config
+        self.session: Optional[aiohttp.ClientSession] = None
+        # Use the global config module for API URLs
+        from config import config as global_config
+        self.api_url = global_config.get_api_url("mainnet")
+        self.signed_api_url = global_config.get("signedApiUrl")
+        self.fills_data: List[Dict] = []
+        
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
+    async def fetch_filled_orders(self) -> List[Dict]:
+        """Fetch filled orders from Dexalot API with pagination"""
+        logger.info(f"Fetching filled orders for {self.config.pair_str} from {self.config.start_time} to {self.config.end_time}")
+        
+        all_orders = []
+        page = 0
+        has_more = True
+        
+        while has_more:
+            try:
+                # Construct URL with pagination
+                # Assuming the API supports category=1 for filled orders and pagination
+                url = f"{self.signed_api_url}orders?pair={self.config.pair_str}&category=1&page={page}&limit=20"
+                
+                # Add time range filters if supported by API
+                url += f"&startTime={self.config.start_time}&endTime={self.config.end_time}"
+                
+                logger.debug(f"Fetching page {page}: {url}")
+                
+                async with self.session.get(url) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to fetch orders: HTTP {response.status}")
+                        break
+                    
+                    data = await response.json()
+                    
+                    # Handle response based on API structure
+                    # Assuming response is a list of orders or has an 'orders' field
+                    if isinstance(data, list):
+                        orders = data
+                    elif isinstance(data, dict) and 'orders' in data:
+                        orders = data['orders']
+                    else:
+                        logger.error(f"Unexpected response format: {data}")
+                        break
+                    
+                    # Check if we got any orders
+                    if not orders:
+                        has_more = False
+                        break
+                    
+                    # Filter orders by timestamp if API doesn't support time filters
+                    filtered_orders = [
+                        order for order in orders
+                        if self.config.start_time <= int(order.get('ts', 0)) <= self.config.end_time
+                    ]
+                    
+                    all_orders.extend(filtered_orders)
+                    
+                    # Check if we should continue pagination
+                    if len(orders) < 20:  # Less than page size means no more pages
+                        has_more = False
+                    else:
+                        page += 1
+                        
+                    # Add a small delay to avoid rate limiting
+                    await asyncio.sleep(0.1)
+                    
+            except Exception as e:
+                logger.error(f"Error fetching orders page {page}: {e}")
+                break
+        
+        logger.info(f"Fetched {len(all_orders)} filled orders")
+        return all_orders
+    
+    def process_analytics(self, orders: List[Dict]) -> Dict[str, Any]:
+        """Process fetched orders to calculate analytics"""
+        data = {
+            'totalCost': 0,
+            'totalSold': 0,
+            'qtyOutstanding': 0,
+            'totalQtyBought': 0,
+            'totalQtySold': 0,
+            'totalFees': 0,
+            'buyFills': 0,
+            'sellFills': 0,
+            'totalVolumeBase': 0,
+            'totalVolumeQuote': 0,
+            'avgBuyPrice': 0,
+            'avgSellPrice': 0,
+            'pnl': 0,
+            'startTime': self.config.start_time,
+            'endTime': self.config.end_time,
+            'duration_hours': (self.config.end_time - self.config.start_time) / 3600
+        }
+        
+        for order in orders:
+            # Skip if order is outside our time range
+            if order.get('ts', 0) < self.config.start_time or order.get('ts', 0) > self.config.end_time:
+                continue
+            
+            qty_filled = float(order.get('quantityfilled', 0))
+            total_amount = float(order.get('totalamount', 0))
+            price = float(order.get('price', 0))
+            side = int(order.get('side', -1))
+            
+            if side == 0:  # Buy order
+                data['buyFills'] += 1
+                data['totalCost'] += total_amount
+                data['totalQtyBought'] += qty_filled
+            elif side == 1:  # Sell order
+                data['sellFills'] += 1
+                data['totalSold'] += total_amount
+                data['totalQtySold'] += qty_filled
+            
+            data['totalFees'] += float(order.get('totalfee', 0))
+            data['totalVolumeBase'] += qty_filled
+            data['totalVolumeQuote'] += total_amount
+        
+        # Calculate derived metrics
+        data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
+        
+        if data['totalQtyBought'] > 0:
+            data['avgBuyPrice'] = data['totalCost'] / data['totalQtyBought']
+        
+        if data['totalQtySold'] > 0:
+            data['avgSellPrice'] = data['totalSold'] / data['totalQtySold']
+        
+        # Calculate PnL
+        data['pnl'] = data['totalSold'] - data['totalCost'] - data['totalFees']
+        
+        # Add performance metrics
+        if data['duration_hours'] > 0:
+            data['volume_per_hour'] = data['totalVolumeQuote'] / data['duration_hours']
+            data['trades_per_hour'] = (data['buyFills'] + data['sellFills']) / data['duration_hours']
+        
+        return data
+    
+    def print_analytics_report(self, analytics: Dict[str, Any]):
+        """Print formatted analytics report"""
+        print("\n" + "=" * 60)
+        print(f"ANALYTICS REPORT - {self.config.market}")
+        print("=" * 60)
+        print(f"Period: {datetime.fromtimestamp(analytics['startTime'])} to {datetime.fromtimestamp(analytics['endTime'])}")
+        print(f"Duration: {analytics['duration_hours']:.2f} hours")
+        print("\nTRADING SUMMARY:")
+        print(f"  Total Buy Fills:  {analytics['buyFills']}")
+        print(f"  Total Sell Fills: {analytics['sellFills']}")
+        print(f"  Total Fills:      {analytics['buyFills'] + analytics['sellFills']}")
+        print("\nVOLUME:")
+        print(f"  Base Volume:  {analytics['totalVolumeBase']:.4f} {self.config.base}")
+        print(f"  Quote Volume: {analytics['totalVolumeQuote']:.2f} {self.config.quote}")
+        print(f"  Volume/Hour:  {analytics.get('volume_per_hour', 0):.2f} {self.config.quote}")
+        print("\nPRICES:")
+        print(f"  Avg Buy Price:  {analytics['avgBuyPrice']:.4f}")
+        print(f"  Avg Sell Price: {analytics['avgSellPrice']:.4f}")
+        print(f"  Spread:         {(analytics['avgSellPrice'] - analytics['avgBuyPrice']):.4f} ({((analytics['avgSellPrice'] - analytics['avgBuyPrice']) / analytics['avgBuyPrice'] * 100):.2f}%)")
+        print("\nPOSITION:")
+        print(f"  Quantity Bought:      {analytics['totalQtyBought']:.4f} {self.config.base}")
+        print(f"  Quantity Sold:        {analytics['totalQtySold']:.4f} {self.config.base}")
+        print(f"  Outstanding Position: {analytics['qtyOutstanding']:.4f} {self.config.base}")
+        print("\nFINANCIALS:")
+        print(f"  Total Cost:   {analytics['totalCost']:.2f} {self.config.quote}")
+        print(f"  Total Sold:   {analytics['totalSold']:.2f} {self.config.quote}")
+        print(f"  Total Fees:   {analytics['totalFees']:.2f} {self.config.quote}")
+        print(f"  Net PnL:      {analytics['pnl']:.2f} {self.config.quote}")
+        print("=" * 60 + "\n")
+    
+    async def run(self):
+        """Run the complete analytics process"""
+        try:
+            # Fetch filled orders
+            orders = await self.fetch_filled_orders()
+            
+            if not orders:
+                logger.warning("No filled orders found for the specified period")
+                return
+            
+            # Process analytics
+            analytics = self.process_analytics(orders)
+            
+            # Print report
+            self.print_analytics_report(analytics)
+            
+            # Optionally save to file
+            if getattr(self.config, 'save_to_file', False):
+                self.save_analytics_to_file(analytics, orders)
+            
+        except Exception as e:
+            logger.error(f"Error running analytics: {e}")
+            raise
+    
+    def save_analytics_to_file(self, analytics: Dict[str, Any], orders: List[Dict]):
+        """Save analytics data to CSV file"""
+        try:
+            # Create directory if it doesn't exist
+            directory = f'analytics_reports/{self.config.base.lower()}_{self.config.quote.lower()}/'
+            os.makedirs(directory, exist_ok=True)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{directory}analytics_{timestamp}.json"
+            
+            # Save analytics summary
+            with open(filename, 'w') as f:
+                json.dump({
+                    'summary': analytics,
+                    'orders': orders
+                }, f, indent=2)
+            
+            logger.info(f"Analytics saved to {filename}")
+            
+        except Exception as e:
+            logger.error(f"Error saving analytics to file: {e}")
 
 async def start():
-    """Start analytics mode."""
+    """Start analytics mode with command line parameters."""
     logger.info("Starting analytics mode")
     
     try:
-        # Get API URLs from config
-        api_url = config.get_api_url("mainnet")  # Default to mainnet for analytics
-        signed_api_url = config.get("signedApiUrl")
+        # Parse command line arguments
+        # Expected format: python3 main.py AVAX_USDC analytics <start_time> <end_time>
+        if len(sys.argv) < 5:
+            logger.error("Usage: python3 main.py <MARKET> analytics <start_time> <end_time>")
+            logger.error("Example: python3 main.py AVAX_USDC analytics 1752671718 1752673881")
+            sys.exit(1)
         
-        if not signed_api_url:
-            logger.error("signedApiUrl not configured")
-            return
+        market = sys.argv[1]
+        start_time = int(sys.argv[3])
+        end_time = int(sys.argv[4])
         
-        # Start analytics tasks
-        await asyncio.gather(
-            _analytics_task(api_url, signed_api_url),
-            return_exceptions=True
+        # Parse market symbols
+        base = tools.getSymbolFromName(market, 0)
+        quote = tools.getSymbolFromName(market, 1)
+        pair_str = f"{base}/{quote}"
+        
+        # Get settings for this market
+        market_settings = settings.settings.get(market, {})
+        
+        # Create analytics configuration
+        analytics_config = AnalyticsConfig(
+            market=market,
+            start_time=start_time,
+            end_time=end_time,
+            base=base,
+            quote=quote,
+            pair_str=pair_str,
+            settings_config=market_settings
         )
         
+        logger.info(f"Running analytics for {market} from {datetime.fromtimestamp(start_time)} to {datetime.fromtimestamp(end_time)}")
+        
+        # Initialize contracts to get token details
+        await contracts.initializeProviders(market, market_settings, False, base)
+        
+        # Run analytics
+        async with DexalotAnalytics(analytics_config) as analytics:
+            await analytics.run()
+        
+        logger.info("Analytics completed successfully")
+        
+    except KeyboardInterrupt:
+        logger.info("Analytics interrupted by user")
+        sys.exit(0)
     except Exception as e:
         logger.error(f"Analytics error: {e}")
-        raise
-
-async def _analytics_task(api_url: str, signed_api_url: str):
-    """Main analytics task."""
-    logger.info("Analytics task started")
+        sys.exit(1)
     
-    # Your analytics logic here
-    # This is a placeholder - implement your specific analytics needs
-    
-    while True:
-        try:
-            # Example: Fetch some analytics data
-            async with aiohttp.ClientSession() as session:
-                # Add your analytics API calls here
-                pass
-                
-        except Exception as e:
-            logger.error(f"Analytics task error: {e}")
-            
-        await asyncio.sleep(60)  # Update every minute
+    # Exit gracefully without going through market maker shutdown
+    sys.exit(0)
 
-def runAnalytics(ordersList,startTime):
-  try:
-    data = {
-      'totalCost' : 0,
-      'totalSold' : 0,
-      'qtyOutstanding' : 0,
-      'totalQtyBought':0,
-      'totalQtySold':0,
-      'totalFees' : 0,
-      'buyFills' : 0,
-      'sellFills' : 0,
-      'totalVolumeBase': 0,
-      'totalVolumeQuote': 0
-    };
-    if len(sys.argv) > 4 and not startTime:
-      startDate = int(sys.argv[4])
-    elif startTime:
-      startDate = startTime
-    for order in ordersList:
-      if order['id'] == "0xf82ab7d84f27d8d2e7a6b2859b3f7835550e14f0cf10ea2ae00c500000000000" or order['ts'] < startDate:
-        continue
-      qtyFilled = float(order['quantityfilled'])
-      totalAmount = float(order['totalamount'])
-      price = float(order['price'])
-      if int(order['side']) == 0:
-        data['buyFills'] += 1
-        data['totalCost'] += totalAmount
-        data['totalQtyBought'] += qtyFilled
-      else:
-        data['sellFills'] += 1
-        data['totalSold'] += totalAmount
-        data['totalQtySold'] += qtyFilled
-      data['totalFees'] += float(order['totalfee'])
-      data['totalVolumeBase'] += qtyFilled
-      data['totalVolumeQuote'] += totalAmount
-
-    data['qtyOutstanding'] = data['totalQtyBought'] - data['totalQtySold']
-    data['avgBuyPrice'] = data['totalCost']/data['totalQtyBought']
-    data['avgSellPrice'] = data['totalSold']/data['totalQtySold']
-    pprint(data)
-  except Exception as err:
-    print('err in runAnalytics', err)
-    pprint(data)
-
-def getDataFromFiles():
-  try:
-    directory = 'fillData/'+base.lower()+'_'+quote.lower()+'/'
-    # List to store all records
-    all_records = []
-
-    # Regex pattern to extract date (YYYYMM) from filenames
-    filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
-
-    # Iterate through files in the directory
-    for filename in os.listdir(directory):
-        match = filename_pattern.match(filename)
-        if match:
-            file_date = match.group(1)  # Extracted YYYYMM string
-            file_datetime = datetime.strptime(file_date, "%Y%m")  # Convert to datetime object
-            
-            file_path = os.path.join(directory, filename)
-            print('openFile:', file_path)
-            with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
-              print('readFile:', file_path)
-              reader = csv.DictReader(csv_file)  # Read CSV as dictionary
-              for row in reader:
-                all_records.append(row)
-                    # sys.exit()
-                    # all_records.append({
-                    #   'type': row[1],
-                    #   'type2': row[2],
-                    #   'side': row[3], 
-                    #   'price': row[4], 
-                    #   'quantity': row[5], 
-                    #   'totalamount': row[6], 
-                    #   'ts': row[7], 
-                    #   'quantityfilled': row[8],
-                    #   'totalfee': row[9], 
-                    #   'cumgas_cost': row[10]
-                    # })
-
-    # Sort all records by date
-    all_records.sort(key=lambda x: x['ts'])
-
-    startDate = '1'
-    if len(sys.argv) > 4:
-      startDate = formatted_time = datetime.fromtimestamp(int(sys.argv[4]), tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S+00')
-    # Print or use the sorted data
-    runAnalytics(all_records, startDate)
-  except Exception as err:
-    print('error in getData from files:', err)
-  sys.exit()
+# Legacy function for reading from CSV files - kept for backward compatibility
+def read_historical_csv_data(base: str, quote: str, start_time: Optional[int] = None) -> List[Dict]:
+    """Read historical data from CSV files if available"""
+    try:
+        directory = f'fillData/{base.lower()}_{quote.lower()}/'
+        if not os.path.exists(directory):
+            logger.info(f"No historical CSV data found at {directory}")
+            return []
+        
+        all_records = []
+        filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
+        
+        for filename in os.listdir(directory):
+            match = filename_pattern.match(filename)
+            if match:
+                file_path = os.path.join(directory, filename)
+                with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
+                    reader = csv.DictReader(csv_file)
+                    for row in reader:
+                        if start_time and int(row.get('ts', 0)) < start_time:
+                            continue
+                        all_records.append(row)
+        
+        all_records.sort(key=lambda x: int(x.get('ts', 0)))
+        return all_records
+        
+    except Exception as e:
+        logger.error(f"Error reading CSV files: {e}")
+        return []
