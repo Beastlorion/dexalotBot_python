@@ -105,14 +105,14 @@ class DexalotAnalytics:
                         break
                     
                     orders = data['rows']
-                    total_count = data.get('count', 0)
+                    total_count = int(data.get('count', '0'))
                     
                     all_orders.extend(orders)
                     
                     logger.info(f"Page {page_no}: fetched {len(orders)} orders")
                     
                     # Check if we should continue pagination
-                    current_total = page_no * items_per_page
+                    current_total = len(all_orders)
                     if current_total >= total_count or len(orders) < items_per_page:
                         has_more = False
                     else:
@@ -150,9 +150,6 @@ class DexalotAnalytics:
         }
         
         for order in orders:
-            # Skip if no fills
-            if qty_filled == 0:
-                continue
             
             # Parse timestamp if needed (already filtered by API)
             # ts format: "2023-02-22T18:29:02.000Z"
