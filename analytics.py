@@ -75,20 +75,23 @@ class DexalotAnalytics:
         
         while has_more:
             try:
-                # Construct URL with proper parameters
-                url = f"{self.signed_api_url}orders"
-                params = {
-                    'periodfrom': from_date,
-                    'periodto': to_date,
-                    'itemsperpage': items_per_page,
-                    'pageno': page_no,
-                    'pair': self.config.pair_str,
-                    'category': 0  # 0 for all orders, will filter filled ones later
-                }
+                # Construct URL with parameters
+                url = (f"{self.signed_api_url}orders?"
+                      f"periodfrom={from_date}&"
+                      f"periodto={to_date}&"
+                      f"itemsperpage={items_per_page}&"
+                      f"pageno={page_no}&"
+                      f"pair={self.config.pair_str}&"
+                      f"category=1")
                 
-                logger.debug(f"Fetching page {page_no}: {url} with params {params}")
+                logger.debug(f"Fetching page {page_no}: {url}")
                 
-                async with self.session.get(url, params=params) as response:
+                # Add x-signature header
+                headers = {}
+                if hasattr(contracts, 'signature') and contracts.signature:
+                    headers['x-signature'] = contracts.signature
+                
+                async with self.session.get(url, headers=headers) as response:
                     if response.status != 200:
                         text = await response.text()
                         logger.error(f"Failed to fetch orders: HTTP {response.status} - {text}")
@@ -104,16 +107,9 @@ class DexalotAnalytics:
                     orders = data['rows']
                     total_count = data.get('count', 0)
                     
-                    # Filter for filled orders (status 2 = FILLED, 4 = CANCELED)
-                    # Also check quantityfilled > 0 for partially filled orders
-                    filled_orders = [
-                        order for order in orders
-                        if float(order.get('quantityfilled', '0')) > 0
-                    ]
+                    all_orders.extend(orders)
                     
-                    all_orders.extend(filled_orders)
-                    
-                    logger.info(f"Page {page_no}: fetched {len(orders)} orders, {len(filled_orders)} with fills")
+                    logger.info(f"Page {page_no}: fetched {len(orders)} orders")
                     
                     # Check if we should continue pagination
                     current_total = page_no * items_per_page
@@ -339,8 +335,15 @@ async def start():
         
         logger.info(f"Running analytics for {market} from {datetime.fromtimestamp(start_time)} to {datetime.fromtimestamp(end_time)}")
         
-        # Initialize contracts to get token details
+        # Initialize contracts to get token details and signature
         await contracts.initializeProviders(market, market_settings, False, base)
+        
+        # Ensure we have a signature for API calls
+        if not hasattr(contracts, 'signature') or not contracts.signature:
+            logger.error("No signature available for API authentication")
+            sys.exit(1)
+        
+        logger.info("Contracts initialized, signature available")
         
         # Run analytics
         async with DexalotAnalytics(analytics_config) as analytics:
