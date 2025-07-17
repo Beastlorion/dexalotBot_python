@@ -110,9 +110,8 @@ class OdosAPI:
         quote_token_address: str,
         base_decimals: int,
         quote_decimals: int,
-        amount_usd: float = 100.0,
-        user_address: str = "0x0000000000000000000000000000000000000000",
-        base_price_usd: float = 1.0
+        amt_to_swap: float = 100.0,
+        user_address: str = "0x0000000000000000000000000000000000000000"
     ) -> Optional[float]:
         """
         Get price by fetching quotes in both directions and averaging
@@ -124,22 +123,20 @@ class OdosAPI:
             quote_decimals: Quote token decimals
             amount_usd: USD value to use for quotes
             user_address: User address for quote
-            base_price_usd: USD price of base token (for amount calculation)
             
         Returns:
             Average price or None if failed
         """
         try:
             # Calculate amount of base token for the USD value
-            base_amount = amount_usd / base_price_usd
-            base_amount_wei = int(base_amount * (10 ** base_decimals))
+            base_amount = amt_to_swap
             
             # Get buy quote (quote_token -> base_token)
             # This gives us how much quote token we need to buy base token
             buy_quote = await self.get_swap_quote(
                 input_token=quote_token_address,
                 output_token=base_token_address,
-                amount=int(amount_usd * (10 ** quote_decimals)),  # $100 worth of USDC
+                amount=int(amt_to_swap * (10 ** quote_decimals)),  # $100 worth of USDC
                 user_address=user_address,
                 slippage_percent=1.0
             )
@@ -147,6 +144,9 @@ class OdosAPI:
             if not buy_quote:
                 logger.warning(f"Failed to get buy quote for {base_token_address}/{quote_token_address}")
                 return None
+
+            buy_out = float(buy_quote["outAmounts"][0]) / (10 ** base_decimals)
+            base_amount_wei = int(buy_out * (10 ** base_decimals))
             
             # Get sell quote (base_token -> quote_token)
             # This gives us how much quote token we get for selling base token
@@ -165,7 +165,6 @@ class OdosAPI:
             # Calculate prices from quotes
             # Buy quote: input USDC to get base token
             buy_in = float(buy_quote["inAmounts"][0]) / (10 ** quote_decimals)
-            buy_out = float(buy_quote["outAmounts"][0]) / (10 ** base_decimals)
             
             if buy_out > 0:
                 buy_price = buy_in / buy_out  # USDC per base token

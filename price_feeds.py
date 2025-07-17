@@ -598,19 +598,12 @@ class EnhancedPriceFeed:
                 logger.error(f"Token addresses not found for {base} or {quote}")
                 return
             
-            # Get a fallback base price (e.g., from Binance/Bybit if available)
-            base_price_usd = 1.0  # Default for stablecoins
-            if PriceSource.BINANCE in self.prices:
-                base_price_usd = self.prices[PriceSource.BINANCE].price
-            elif PriceSource.BYBIT in self.prices:
-                base_price_usd = self.prices[PriceSource.BYBIT].price
-            
-            # Special handling for USDC/USDT pairs
-            if base in ['USDC', 'USDT'] and quote in ['USDC', 'USDT']:
-                base_price_usd = 1.0
-            
             # Get user address from market settings or use a default
             user_address = self.market_settings.get('address', contracts.address or "0x0000000000000000000000000000000000000000")
+            
+            # Get amount to swap from settings, default to $100
+            amount_to_swap = self.market_settings.get('amt_to_swap', 100.0)
+            logger.debug(f"Using swap amount of ${amount_to_swap} for Odos quotes")
             
             # Fetch price from Odos
             price = await self.odos_api.get_price_from_quotes(
@@ -618,9 +611,8 @@ class EnhancedPriceFeed:
                 quote_token_address=quote_address,
                 base_decimals=base_decimals,
                 quote_decimals=quote_decimals,
-                amount_usd=100.0,  # Use $100 worth for quotes
-                user_address=user_address,
-                base_price_usd=base_price_usd
+                amount_usd=amount_to_swap,
+                user_address=user_address
             )
             
             if price and price > 0:
