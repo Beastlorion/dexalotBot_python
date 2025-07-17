@@ -121,7 +121,7 @@ class OdosAPI:
             quote_token_address: Quote token address (e.g., USDC)
             base_decimals: Base token decimals
             quote_decimals: Quote token decimals
-            amount_usd: USD value to use for quotes
+            amt_to_swap: value to use for quotes
             user_address: User address for quote
             
         Returns:

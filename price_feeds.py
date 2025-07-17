@@ -611,7 +611,7 @@ class EnhancedPriceFeed:
                 quote_token_address=quote_address,
                 base_decimals=base_decimals,
                 quote_decimals=quote_decimals,
-                amount_usd=amount_to_swap,
+                amt_to_swap=amount_to_swap,
                 user_address=user_address
             )
             
