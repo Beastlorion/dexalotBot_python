@@ -209,6 +209,9 @@ async def cancelAllOrders(pairStr,shuttingDown = False):
   if len(orderIDs) > 0:
     logger.info(f"[ORDERS] Found {len(orderIDs)} orders to cancel: {orderIDs}")
     success = await cancelOrderList(orderIDs, 1)
+    for order in contracts.activeOrders:
+      if order['orderID'] in orderIDs:
+        contracts.activeOrders.remove(order)
     
     if shuttingDown:
       logger.info(f"[ORDERS] Order cancellation during shutdown {'succeeded' if success else 'failed'}")
