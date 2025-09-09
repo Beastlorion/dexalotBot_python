@@ -150,7 +150,8 @@ class DexalotAnalytics:
         }
         
         for order in orders:
-            
+            if (order.get('pair', '') != self.config.pair_str):
+                continue
             # Parse timestamp if needed (already filtered by API)
             # ts format: "2023-02-22T18:29:02.000Z"
             ts_str = order.get('ts', '')
@@ -167,6 +168,9 @@ class DexalotAnalytics:
             qty_filled = float(order.get('quantityfilled', '0'))
             total_amount = float(order.get('totalamount', '0'))
             price = float(order.get('price', '0'))
+            type = order.get('type', '')
+            # if (price < 14 or price > 50):
+            #     print(order)
             side = int(order.get('side', -1))
             
             # If totalamount is 0, calculate it from price and quantity
@@ -248,11 +252,14 @@ class DexalotAnalytics:
         print(f"  Net PnL:      {analytics['pnl']:.2f} {self.config.quote}")
         print("=" * 60 + "\n")
     
-    async def run(self):
+    async def run(self, useCsv: bool = False):
         """Run the complete analytics process"""
         try:
             # Fetch filled orders
-            orders = await self.fetch_filled_orders()
+            if useCsv:
+                orders = self.read_historical_csv_data(self.config.base, self.config.quote, self.config.start_time)
+            else:
+                orders = await self.fetch_filled_orders()
             
             if not orders:
                 logger.warning("No filled orders found for the specified period")
@@ -295,6 +302,49 @@ class DexalotAnalytics:
         except Exception as e:
             logger.error(f"Error saving analytics to file: {e}")
 
+    # Legacy function for reading from CSV files - kept for backward compatibility
+    def read_historical_csv_data(self, base: str, quote: str, start_time: Optional[str] = None) -> List[Dict]:
+        """Read historical data from CSV files if available"""
+        try:
+            directory = f'fillData/{base.lower()}_{quote.lower()}/'
+            if not os.path.exists(directory):
+                logger.info(f"No historical CSV data found at {directory}")
+                return []
+            
+            all_records = []
+            filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
+            
+            for filename in os.listdir(directory):
+                match = filename_pattern.match(filename)
+                if match:
+                    file_path = os.path.join(directory, filename)
+                    with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
+                        reader = csv.DictReader(csv_file)
+                        for row in reader:
+                            if start_time:
+                                # Handle both int (unix timestamp) and string date formats
+                                if isinstance(start_time, (int, float)):
+                                    # Convert unix timestamp to datetime for comparison
+                                    start_dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
+                                else:
+                                    # Parse string date format
+                                    start_dt = datetime.fromisoformat(str(start_time).replace('+00', '+00:00'))
+                                
+                                # Parse the CSV timestamp string
+                                row_ts_str = row.get('ts', '')
+                                if row_ts_str:
+                                    row_dt = datetime.fromisoformat(row_ts_str.replace('+00', '+00:00'))
+                                    if row_dt < start_dt:
+                                        continue
+                            all_records.append(row)
+            
+            all_records.sort(key=lambda x: datetime.fromisoformat(x.get('ts', '1970-01-01 00:00:00+00:00').replace('+00', '+00:00')))
+            return all_records
+            
+        except Exception as e:
+            logger.error(f"Error reading CSV files: {e}")
+            return []
+
 async def start():
     """Start analytics mode with command line parameters."""
     logger.info("Starting analytics mode")
@@ -310,7 +360,11 @@ async def start():
         market = sys.argv[1]
         start_time = int(sys.argv[3])
         end_time = int(sys.argv[4])
-        
+
+        useCsv = False
+        if len(sys.argv) > 5:
+            useCsv = int(sys.argv[5])
+
         # Parse market symbols
         base = tools.getSymbolFromName(market, 0)
         quote = tools.getSymbolFromName(market, 1)
@@ -344,7 +398,7 @@ async def start():
         
         # Run analytics
         async with DexalotAnalytics(analytics_config) as analytics:
-            await analytics.run()
+            await analytics.run(useCsv)
         
         logger.info("Analytics completed successfully")
         
@@ -358,32 +412,3 @@ async def start():
     # Exit gracefully without going through market maker shutdown
     sys.exit(0)
 
-# Legacy function for reading from CSV files - kept for backward compatibility
-def read_historical_csv_data(base: str, quote: str, start_time: Optional[int] = None) -> List[Dict]:
-    """Read historical data from CSV files if available"""
-    try:
-        directory = f'fillData/{base.lower()}_{quote.lower()}/'
-        if not os.path.exists(directory):
-            logger.info(f"No historical CSV data found at {directory}")
-            return []
-        
-        all_records = []
-        filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
-        
-        for filename in os.listdir(directory):
-            match = filename_pattern.match(filename)
-            if match:
-                file_path = os.path.join(directory, filename)
-                with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
-                    reader = csv.DictReader(csv_file)
-                    for row in reader:
-                        if start_time and int(row.get('ts', 0)) < start_time:
-                            continue
-                        all_records.append(row)
-        
-        all_records.sort(key=lambda x: int(x.get('ts', 0)))
-        return all_records
-        
-    except Exception as e:
-        logger.error(f"Error reading CSV files: {e}")
-        return []
