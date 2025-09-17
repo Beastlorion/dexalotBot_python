@@ -89,6 +89,7 @@ class MarketMaker:
             await asyncio.sleep(2)
             
             contracts.getBalances(self.base, self.quote, self.pair_obj)
+            await asyncio.sleep(2)
             orders.getBestOrders()
             
             logger.info("Market maker initialization complete")
