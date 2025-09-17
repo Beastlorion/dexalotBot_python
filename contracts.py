@@ -141,6 +141,15 @@ async def initializeProviders(market: str, settings: Dict, testnet: bool, base: 
             except Exception as e:
                 logger.warning(f"Failed to initialize Base provider: {e}")
 
+        # Initialize Binance smart chain provider
+        if not testnet:  # Only for mainnet
+            try:
+                bsc_rpc_url = config.get_rpc_url("mainnet", "bsc")
+                contracts["BscProvider"] = await _create_provider(bsc_rpc_url, private_key, account.address)
+                logger.info("Bsc provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Bsc provider: {e}")
+
         logger.info("Provider initialization complete")
         
     except Exception as e:
@@ -231,6 +240,9 @@ async def initializeContracts(market,pairObj,testnet):
       elif (item['env'] == "production-multi-base" or (testnet and item['env'] == "fuji-multi-base" and item["subnet_symbol"] != "ALOT")) and base in ['TOSHI','ETH']:
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BaseProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+      elif (item['env'] == "production-multi-bsc" or (testnet and item['env'] == "fuji-multi-bsc" and item["subnet_symbol"] != "ALOT")):
+        contracts[item["subnet_symbol"]]["tokenDetails"] = item
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BscProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
     elif item["subnet_symbol"] == "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item 
   print('finished initializeContracts')
