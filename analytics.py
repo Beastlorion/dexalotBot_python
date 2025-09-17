@@ -306,39 +306,73 @@ class DexalotAnalytics:
     def read_historical_csv_data(self, base: str, quote: str, start_time: Optional[str] = None) -> List[Dict]:
         """Read historical data from CSV files if available"""
         try:
-            directory = f'fillData/{base.lower()}_{quote.lower()}/'
-            if not os.path.exists(directory):
-                logger.info(f"No historical CSV data found at {directory}")
-                return []
-            
             all_records = []
-            filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
+            target_pair = f"{base}/{quote}"
             
-            for filename in os.listdir(directory):
-                match = filename_pattern.match(filename)
-                if match:
-                    file_path = os.path.join(directory, filename)
-                    with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
-                        reader = csv.DictReader(csv_file)
-                        for row in reader:
-                            if start_time:
-                                # Handle both int (unix timestamp) and string date formats
-                                if isinstance(start_time, (int, float)):
-                                    # Convert unix timestamp to datetime for comparison
-                                    start_dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
-                                else:
-                                    # Parse string date format
-                                    start_dt = datetime.fromisoformat(str(start_time).replace('+00', '+00:00'))
-                                
-                                # Parse the CSV timestamp string
-                                row_ts_str = row.get('ts', '')
-                                if row_ts_str:
-                                    row_dt = datetime.fromisoformat(row_ts_str.replace('+00', '+00:00'))
-                                    if row_dt < start_dt:
-                                        continue
-                            all_records.append(row)
+            # Read from market-specific directory
+            directory = f'fillData/{base.lower()}_{quote.lower()}/'
+            if os.path.exists(directory):
+                filename_pattern = re.compile(rf"{base.lower()}_[a-z]+_(\d{{6}})\.csv")
+                
+                for filename in os.listdir(directory):
+                    match = filename_pattern.match(filename)
+                    if match:
+                        file_path = os.path.join(directory, filename)
+                        with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
+                            reader = csv.DictReader(csv_file)
+                            for row in reader:
+                                if start_time:
+                                    # Handle both int (unix timestamp) and string date formats
+                                    if isinstance(start_time, (int, float)):
+                                        # Convert unix timestamp to datetime for comparison
+                                        start_dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
+                                    else:
+                                        # Parse string date format
+                                        start_dt = datetime.fromisoformat(str(start_time).replace('+00', '+00:00'))
+                                    
+                                    # Parse the CSV timestamp string
+                                    row_ts_str = row.get('ts', '')
+                                    if row_ts_str:
+                                        row_dt = datetime.fromisoformat(row_ts_str.replace('+00', '+00:00'))
+                                        if row_dt < start_dt:
+                                            continue
+                                all_records.append(row)
+            else:
+                logger.info(f"No market-specific CSV data found at {directory}")
+            
+            # Read from shared directory and filter by pair
+            shared_directory = 'fillData/shared/'
+            if os.path.exists(shared_directory):
+                logger.info(f"Reading shared data for market {target_pair}")
+                for filename in os.listdir(shared_directory):
+                    if filename.endswith('.csv'):
+                        file_path = os.path.join(shared_directory, filename)
+                        with open(file_path, "r", newline="", encoding="utf-8") as csv_file:
+                            reader = csv.DictReader(csv_file)
+                            for row in reader:
+                                # Filter by pair to match the target market
+                                if row.get('pair', '') == target_pair:
+                                    if start_time:
+                                        # Handle both int (unix timestamp) and string date formats
+                                        if isinstance(start_time, (int, float)):
+                                            # Convert unix timestamp to datetime for comparison
+                                            start_dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
+                                        else:
+                                            # Parse string date format
+                                            start_dt = datetime.fromisoformat(str(start_time).replace('+00', '+00:00'))
+                                        
+                                        # Parse the CSV timestamp string
+                                        row_ts_str = row.get('ts', '')
+                                        if row_ts_str:
+                                            row_dt = datetime.fromisoformat(row_ts_str.replace('+00', '+00:00'))
+                                            if row_dt < start_dt:
+                                                continue
+                                    all_records.append(row)
+            else:
+                logger.info("No shared CSV data directory found")
             
             all_records.sort(key=lambda x: datetime.fromisoformat(x.get('ts', '1970-01-01 00:00:00+00:00').replace('+00', '+00:00')))
+            logger.info(f"Total records loaded: {len(all_records)} (including shared data)")
             return all_records
             
         except Exception as e:
