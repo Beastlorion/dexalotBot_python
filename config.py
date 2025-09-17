@@ -66,6 +66,8 @@ class Config:
                 return self.get_required("arb_rpc_url")
             elif chain == "base":
                 return self.get_required("base_rpc_url")
+            elif chain == "bsc":
+                return self.get_required("bsc_rpc_url")
         
         raise ValueError(f"Unknown network/chain combination: {network}/{chain}")
     
