@@ -688,7 +688,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
-      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+      decimals = contracts[quote]["tokenDetails"]["l1_decimals"]
       quoteShift = 'ether'
       match decimals:
         case 6:
