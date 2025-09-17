@@ -320,6 +320,22 @@ async def handleWebscokets(pairObj, testnet):
   last_pending_tx_time = 0
   last_order_status_update_time = time.time()
   force_reconnect = False
+
+  quote_decimals = pairObj["quote_evmdecimals"]
+  quoteShift = 'ether'
+  match quote_decimals:
+    case 6:
+      quoteShift = "lovelace"
+    case 8:
+      quoteShift = "8_dec"
+
+  base_decimals = pairObj["base_evmdecimals"]
+  baseShift = 'ether'
+  match base_decimals:
+    case 6:
+      baseShift = "lovelace"
+    case 8:
+      baseShift = "8_dec"
   
   while status:
     
@@ -656,7 +672,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    decimals = contracts[base]["tokenDetails"]["base_evmdecimals"]
+    decimals = contracts[base]["tokenDetails"]["evmdecimals"]
     baseShift = 'ether'
     match decimals:
       case 6:
@@ -672,7 +688,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
-      decimals = contracts[quote]["tokenDetails"]["quote_evmdecimals"]
+      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
       quoteShift = 'ether'
       match decimals:
         case 6:
