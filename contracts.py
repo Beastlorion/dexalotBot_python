@@ -656,7 +656,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+    decimals = contracts[base]["tokenDetails"]["base_evmdecimals"]
     baseShift = 'ether'
     match decimals:
       case 6:
@@ -672,7 +672,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES:",base,contracts[base]["mainnetBal"], contracts[base]["portfolioTot"], contracts[base]["portfolioAvail"])
     
     if quote != "ALOT" and quote != "AVAX":
-      decimals = contracts[quote]["tokenDetails"]["evmdecimals"]
+      decimals = contracts[quote]["tokenDetails"]["quote_evmdecimals"]
       quoteShift = 'ether'
       match decimals:
         case 6:
