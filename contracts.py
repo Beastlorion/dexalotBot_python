@@ -672,7 +672,7 @@ def getBalances(base, quote, pairObj):
     # print("BALANCES AVAX:",contracts["AVAX"]["mainnetBal"], contracts["AVAX"]["portfolioTot"], contracts["AVAX"]["portfolioAvail"])
     # print("BALANCES ALOT:",contracts["ALOT"]["mainnetBal"], contracts["ALOT"]["portfolioTot"], contracts["ALOT"]["portfolioAvail"])
     
-    decimals = contracts[base]["tokenDetails"]["evmdecimals"]
+    decimals = contracts[base]["tokenDetails"]["l1_decimals"]
     baseShift = 'ether'
     match decimals:
       case 6:
