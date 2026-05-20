@@ -31,6 +31,7 @@ class PriceSource(Enum):
     """Available price sources"""
     BINANCE = "binance"
     BYBIT = "bybit"
+    MEXC = "mexc"
     CUSTOM = "custom"
     DEXALOT = "dexalot"
 
@@ -122,7 +123,10 @@ class EnhancedPriceFeed:
             
             if PriceSource.BYBIT in self.config.sources:
                 start_tasks.append(self._start_bybit_feed())
-            
+
+            if PriceSource.MEXC in self.config.sources:
+                start_tasks.append(self._start_mexc_feed())
+
             if PriceSource.CUSTOM in self.config.sources:
                 start_tasks.append(self._start_custom_feed())
             
@@ -309,7 +313,111 @@ class EnhancedPriceFeed:
         except Exception as e:
             logger.error(f"Failed to start Bybit feed: {e}")
             self._record_source_failure(PriceSource.BYBIT)
-    
+
+    async def _start_mexc_feed(self):
+        """Start MEXC price feed"""
+        try:
+            logger.info(f"Starting MEXC feed for {self.config.symbol}")
+
+            # Parse base and quote from symbol
+            try:
+                base, quote = self._parse_symbol()
+            except ValueError as e:
+                logger.error(str(e))
+                return
+
+            # MEXC uses BENQI instead of QI
+            if base == 'QI':
+                mexc_base = 'BENQI'
+            else:
+                mexc_base = base
+
+            # For MEXC, we need to convert USDC quotes to USDT
+            if quote == 'USDC' and base != 'USDT':
+                # We'll get base/USDT price and USDC/USDT price
+                mexc_symbol = f"{mexc_base}USDT"
+                need_usdc_conversion = True
+            else:
+                mexc_symbol = f"{mexc_base}{quote}"
+                need_usdc_conversion = False
+
+            # Set up WebSocket connection to MEXC spot endpoint
+            ws_url = "wss://wbs-api.mexc.com/ws"
+
+            ws_connection = self.websocket_manager.add_connection(
+                name=f"mexc-{self.config.symbol}",
+                url=ws_url,
+                recv_timeout=5.0
+            )
+
+            # Store subscription data for later use
+            self._mexc_subscription_data = {
+                'mexc_symbol': mexc_symbol,
+                'need_usdc_conversion': need_usdc_conversion
+            }
+
+            # Add message handler that also handles subscription
+            def handle_mexc_message(message: str):
+                try:
+                    logger.info(f"MEXC raw message received: {message}")
+                    data = json.loads(message)
+                    logger.info(f"MEXC parsed data: {data}")
+                    asyncio.create_task(self._process_mexc_data(data))
+                except Exception as e:
+                    logger.error(f"MEXC message error: {e}, raw message: {message}")
+                    self._record_source_failure(PriceSource.MEXC)
+
+            ws_connection.add_message_handler(handle_mexc_message)
+
+            # Start connection and wait for it to be ready
+            logger.info(f"Starting MEXC WebSocket connection for mexc-{self.config.symbol}")
+            await self.websocket_manager.start_connection(f"mexc-{self.config.symbol}")
+
+            # Wait for connection to be established
+            connected = await ws_connection.wait_for_connection(timeout=5.0)
+
+            if not connected:
+                logger.error(f"MEXC WebSocket failed to connect within 5.0s")
+                self._record_source_failure(PriceSource.MEXC)
+                return
+
+            logger.info(f"MEXC WebSocket connected successfully")
+
+            # Now send subscription
+            mexc_symbol = self._mexc_subscription_data['mexc_symbol']
+            need_usdc_conversion = self._mexc_subscription_data['need_usdc_conversion']
+
+            # Subscribe to miniTicker for main symbol (updated every 3 seconds)
+            subscribe_msg = {
+                "method": "SUBSCRIPTION",
+                "params": [f"spot@public.miniTicker.v3.api@{mexc_symbol}@UTC+0"]
+            }
+
+            # If we need USDC conversion, also subscribe to USDCUSDT miniTicker from MEXC
+            if need_usdc_conversion:
+                subscribe_msg["params"].append("spot@public.miniTicker.v3.api@USDCUSDT@UTC+0")
+                # Store that we need conversion
+                self._mexc_needs_usdc_conversion = True
+                self._mexc_usdc_usdt_price = None
+            else:
+                self._mexc_needs_usdc_conversion = False
+
+            subscription_json = json.dumps(subscribe_msg)
+            logger.info(f"MEXC subscribing to: {subscribe_msg['params']}")
+            logger.info(f"MEXC subscription message: {subscription_json}")
+            success = await ws_connection.send_message(subscription_json)
+
+            if not success:
+                logger.error("Failed to send MEXC subscription message")
+                self._record_source_failure(PriceSource.MEXC)
+                return
+
+            logger.info("MEXC subscription message sent successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to start MEXC feed: {e}")
+            self._record_source_failure(PriceSource.MEXC)
+
     async def _start_custom_feed(self):
         """Start custom price feed - uses Odos API when useCustomPrice is True"""
         # Check if we should use Odos API
@@ -558,7 +666,73 @@ class EnhancedPriceFeed:
         except Exception as e:
             logger.error(f"Error processing Bybit data: {e}")
             self._record_source_failure(PriceSource.BYBIT)
-    
+
+    async def _process_mexc_data(self, data: Dict[str, Any]):
+        """Process MEXC miniTicker data"""
+        try:
+            # Handle subscription success
+            if data.get('msg') == 'COMMAND_RECEIVED' or data.get('msg') == 'success':
+                logger.info(f"MEXC subscription confirmed: {data}")
+                return
+
+            # Handle miniTicker updates
+            # Expected format:
+            # {
+            #   "c": "spot@public.miniTicker.v3.api@BTCUSDT@UTC+0",
+            #   "d": {
+            #     "s": "BTCUSDT",     # symbol
+            #     "p": "36474.74",    # last price
+            #     "r": "0.0354",      # price change percent
+            #     "h": "36549.72",    # 24h high
+            #     "l": "35101.68",    # 24h low
+            #     "v": "375173478.65", # 24h volume
+            #     "q": "10557.72895"  # 24h quote volume
+            #   },
+            #   "t": 1699502456051,
+            #   "s": "BTCUSDT"
+            # }
+
+            channel = data.get('c', '')
+
+            if not channel or 'miniTicker' not in channel:
+                return
+
+            ticker_data = data.get('d', {})
+            if not ticker_data:
+                return
+
+            symbol = ticker_data.get('s', '')
+
+            # Get last price from miniTicker
+            price_str = ticker_data.get('p', '0')
+            price = float(price_str) if price_str else 0
+
+            if price <= 0:
+                return
+
+            # Handle USDC/USDT conversion
+            if symbol == 'USDCUSDT':
+                self._mexc_usdc_usdt_price = price
+                logger.debug(f"MEXC USDC/USDT price: {price}")
+            else:
+                # This is our main symbol price
+                if hasattr(self, '_mexc_needs_usdc_conversion') and self._mexc_needs_usdc_conversion:
+                    # Convert from USDT to USDC using MEXC's USDC/USDT price
+                    if hasattr(self, '_mexc_usdc_usdt_price') and self._mexc_usdc_usdt_price:
+                        converted_price = price / self._mexc_usdc_usdt_price
+                        logger.debug(f"MEXC {symbol} price: {price} USDT = {converted_price} USDC")
+                        await self._update_price(PriceSource.MEXC, converted_price)
+                    else:
+                        logger.warning("Waiting for USDC/USDT price for conversion from MEXC")
+                else:
+                    # No conversion needed
+                    logger.debug(f"MEXC {symbol} price: {price}")
+                    await self._update_price(PriceSource.MEXC, price)
+
+        except Exception as e:
+            logger.error(f"Error processing MEXC data: {e}")
+            self._record_source_failure(PriceSource.MEXC)
+
     async def _process_custom_data(self, data: Dict[str, Any]):
         """Process custom price feed data"""
         try:
@@ -589,6 +763,7 @@ class EnhancedPriceFeed:
             quote_token = contracts.contracts[quote]
             
             # Get token addresses and decimals
+
             base_address = base_token.get('tokenDetails', {}).get('address')
             quote_address = quote_token.get('tokenDetails', {}).get('address')
             base_decimals = base_token.get('tokenDetails', {}).get('evmdecimals', 18)
@@ -824,6 +999,8 @@ class EnhancedPriceFeed:
                                 await self._reconnect_binance()
                             elif source == PriceSource.BYBIT:
                                 await self._reconnect_bybit()
+                            elif source == PriceSource.MEXC:
+                                await self._reconnect_mexc()
                             elif source == PriceSource.CUSTOM:
                                 # Custom feed uses polling, so just reset the timestamp
                                 self._source_last_update[source] = current_time
@@ -874,7 +1051,24 @@ class EnhancedPriceFeed:
         
         # Restart the feed
         await self._start_bybit_feed()
-    
+
+    async def _reconnect_mexc(self):
+        """Reconnect MEXC WebSocket"""
+        logger.info("Reconnecting MEXC feed...")
+
+        # Stop existing connection
+        ws_name = f"mexc-{self.config.symbol}"
+        await self.websocket_manager.stop_connection(ws_name)
+
+        # Reset last update time to prevent immediate reconnect loop
+        self._source_last_update[PriceSource.MEXC] = time.time()
+
+        # Small delay before reconnecting
+        await asyncio.sleep(1.0)
+
+        # Restart the feed
+        await self._start_mexc_feed()
+
     async def stop(self):
         """Stop price feed"""
         logger.info(f"Stopping price feed for {self.config.symbol}")
@@ -985,8 +1179,11 @@ async def startPriceFeed(market: str, settings: Dict[str, Any]):
     # Determine price sources based on settings
     sources = []
     primary_source = PriceSource.BINANCE  # Default
-    
-    if settings.get('useBybitPrice', False):
+
+    if settings.get('useMexc', False):
+        sources.append(PriceSource.MEXC)
+        primary_source = PriceSource.MEXC
+    elif settings.get('useBybitPrice', False):
         sources.append(PriceSource.BYBIT)
         primary_source = PriceSource.BYBIT
     elif settings.get('useCustomPrice', False):

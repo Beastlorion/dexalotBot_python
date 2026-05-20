@@ -54,7 +54,7 @@ class MarketMaker:
         
         # Failure handling
         self.consecutive_failures = 0
-        self.max_consecutive_failures = 3
+        self.max_consecutive_failures = 7
         self.shutdown_requested = False
         
         logger.info(f"MarketMaker initialized for {self.pair_str} on {'testnet' if self.testnet else 'mainnet'}")
@@ -271,7 +271,7 @@ class MarketMaker:
         market_price = price_feeds.marketPrice
         
         # Validate against order book if available (detect USDT/USDC confusion)
-        if contracts.bestBid > 0 and contracts.bestAsk > 0:
+        if contracts.bestBid > 0 and contracts.bestAsk < float('inf'):
             order_book_mid = (contracts.bestBid + contracts.bestAsk) / 2
             price_ratio = market_price / order_book_mid if order_book_mid > 0 else 1
             

@@ -508,6 +508,9 @@ async def cancelReplaceOrders(base, quote, marketPrice,settings,responseTime, pa
     return False
   else:
     logger.debug(f"[ORDERS] No order operations needed")
+    if levelsToUpdate > 0:
+      contracts.refreshActiveOrders = True
+      contracts.refreshBalances = True
   logger.info(f"[ORDERS] cancelReplaceOrders completed - total active orders: {len(contracts.activeOrders)}")
   return True
 
@@ -540,7 +543,7 @@ async def replaceOrderList(orders, pairObj, pairByte32, shiftPrice, shiftQty, pr
   print('replaceOrderList -', len(orders), updateIDs)
   try:
     contracts.newPendingTx('replaceOrderList',orders)
-    gas = len(orders) * 1000000
+    gas = len(orders) * 1250000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.cancelAddList(
       updateIDs,
       ordersToReplace
@@ -584,7 +587,7 @@ async def addOrderList(limit_orders,pairObj,pairByte32, shiftPrice, shiftQty,set
   print('Add order list - ', len(limit_orders))
   try:
     contracts.newPendingTx('addOrderList',limit_orders)
-    gas = len(limit_orders) * 1000000
+    gas = len(limit_orders) * 1250000
     contract_data = contracts.contracts["TradePairs"]["deployedContract"].functions.addOrderList(
       ordersToSend
     ).build_transaction({'nonce':contracts.getSubnetNonce(),'gas':gas,'maxFeePerGas':Web3.to_wei(1 + 20, 'gwei'),'maxPriorityFeePerGas': Web3.to_wei(1, 'gwei')})

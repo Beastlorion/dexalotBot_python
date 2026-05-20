@@ -141,6 +141,15 @@ async def initializeProviders(market: str, settings: Dict, testnet: bool, base: 
             except Exception as e:
                 logger.warning(f"Failed to initialize Base provider: {e}")
 
+        # Initialize ETH provider for specific tokens
+        if base in ['XAUT'] and not testnet:
+            try:
+                eth_rpc_url = config.get_rpc_url("mainnet", "eth")
+                contracts["EthProvider"] = await _create_provider(eth_rpc_url, private_key, account.address)
+                logger.info("Eth provider initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Eth provider: {e}")
+
         # Initialize Binance smart chain provider
         if not testnet:  # Only for mainnet
             try:
@@ -218,10 +227,10 @@ async def initializeContracts(market,pairObj,testnet):
     "tokenDetails": None,
     "deployedContract": None
   }
-  contracts["PortfolioSub"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSub"]["address"], abi=contracts["PortfolioSub"]["abi"]["abi"])
-  contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["PortfolioSubHelper"]["address"], abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
-  contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["TradePairs"]["address"], abi=contracts["TradePairs"]["abi"]["abi"])
-  contracts["OrderBooks"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=contracts["OrderBooks"]["address"], abi=contracts["OrderBooks"]["abi"]["abi"])
+  contracts["PortfolioSub"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts["PortfolioSub"]["address"]), abi=contracts["PortfolioSub"]["abi"]["abi"])
+  contracts["PortfolioSubHelper"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts["PortfolioSubHelper"]["address"]), abi=contracts["PortfolioSubHelper"]["abi"]["abi"])
+  contracts["TradePairs"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts["TradePairs"]["address"]), abi=contracts["TradePairs"]["abi"]["abi"])
+  contracts["OrderBooks"]["deployedContract"] = contracts["SubNetProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts["OrderBooks"]["address"]), abi=contracts["OrderBooks"]["abi"]["abi"])
   contracts["OrderBooks"]["id0"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairObj['pair'].encode('utf-8'), 0).call()
   contracts["OrderBooks"]["id1"] = contracts["TradePairs"]["deployedContract"].functions.getBookId(pairObj['pair'].encode('utf-8'), 1).call()
   
@@ -236,13 +245,16 @@ async def initializeContracts(market,pairObj,testnet):
         contracts[item["subnet_symbol"]]["deployedContract"] = contracts["AvaxcProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
       elif item['env'] == "production-multi-arb" or (testnet and item['env'] == "fuji-multi-arb" and item["subnet_symbol"] != "ALOT"):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
-        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["ArbProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
       elif (item['env'] == "production-multi-base" or (testnet and item['env'] == "fuji-multi-base" and item["subnet_symbol"] != "ALOT")) and base in ['TOSHI','ETH']:
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
-        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BaseProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BaseProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
       elif (item['env'] == "production-multi-bsc" or (testnet and item['env'] == "fuji-multi-bsc" and item["subnet_symbol"] != "ALOT")):
         contracts[item["subnet_symbol"]]["tokenDetails"] = item
-        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BscProvider"]["provider"].eth.contract(address=contracts[item["subnet_symbol"]]["tokenDetails"]["address"], abi=ERC20ABI["abi"])
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["BscProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
+      elif (item['env'] == "production-multi-eth" or (testnet and item['env'] == "fuji-multi-eth" and item["subnet_symbol"] != "ALOT")) and base in ['XAUT']:
+        contracts[item["subnet_symbol"]]["tokenDetails"] = item
+        contracts[item["subnet_symbol"]]["deployedContract"] = contracts["EthProvider"]["provider"].eth.contract(address=Web3.to_checksum_address(contracts[item["subnet_symbol"]]["tokenDetails"]["address"]), abi=ERC20ABI["abi"])
     elif item["subnet_symbol"] == "AVAX":
       contracts[item["subnet_symbol"]]["tokenDetails"] = item 
   print('finished initializeContracts')
